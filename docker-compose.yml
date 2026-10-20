@@ -1,0 +1,25 @@
+services:
+  livekit:
+    image: livekit/livekit-server:v1.8.4
+    command: --dev --bind 0.0.0.0
+    ports:
+      - "7880:7880"
+      - "7881:7881/udp"
+      - "50000-50100:50000-50100/udp"
+
+  api:
+    build:
+      context: .
+      dockerfile: server.Dockerfile
+    environment:
+      API_PORT: 3001
+      APP_PUBLIC_URL: ${APP_PUBLIC_URL:-http://localhost:5173}
+      APP_ORIGIN: ${APP_ORIGIN:-http://localhost:5173}
+      LIVEKIT_API_URL: http://livekit:7880
+      LIVEKIT_WS_URL: ${LIVEKIT_WS_URL:-ws://localhost:7880}
+      LIVEKIT_API_KEY: devkey
+      LIVEKIT_API_SECRET: secret
+    ports:
+      - "3001:3001"
+    depends_on:
+      - livekit
