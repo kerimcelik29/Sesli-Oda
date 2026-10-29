@@ -1,5 +1,5 @@
 {
-  "name": "sesli-oda",
+  "name": "sesver",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -38,8 +38,8 @@
     "vite": "^5.4.14"
   },
   "build": {
-    "appId": "app.seslioda.desktop",
-    "productName": "Sesli Oda",
+    "appId": "app.sesver.desktop",
+    "productName": "Sesver",
     "files": [
       "dist/**/*",
       "electron/**/*",

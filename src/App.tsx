@@ -1,19 +1,77 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Room, RoomEvent, Track } from "livekit-client";
+import { Room, RoomEvent, Track, type Participant } from "livekit-client";
 
 type RoomTokenResponse = {
   token: string;
   serverUrl: string;
   participantName: string;
+  roomName: string;
   inviteUrl: string;
 };
 
 type InviteResponse = {
   roomId: string;
+  roomName: string;
   inviteUrl: string;
 };
 
+type EntryAction = {
+  type: "create" | "join";
+  roomId?: string;
+};
+
+type RecentRoom = {
+  roomId: string;
+  roomName: string;
+};
+
+const avatarColors = [
+  ["#b7f3e6", "#42b99e", "#285e57"],
+  ["#ffe0bd", "#e78b5a", "#633d58"],
+  ["#d8d3ff", "#8878df", "#38436f"],
+  ["#c7e8ff", "#55a5d9", "#315a79"],
+  ["#ffd8e4", "#db7294", "#65425f"],
+  ["#ffedb8", "#d5a747", "#57543e"],
+  ["#c8f0c2", "#66ad71", "#385b55"],
+  ["#d8e0ff", "#7183d3", "#41466b"],
+  ["#f6d5c8", "#c97162", "#653d44"],
+  ["#c9f1f5", "#4ba9b9", "#365b71"],
+  ["#eed9ff", "#ad72c8", "#60456c"],
+  ["#e4edc4", "#98a94f", "#515b3e"]
+];
+const hairstyles = [
+  "M18 35Q18 12 40 13Q63 13 62 36L58 29Q50 25 44 19Q35 29 22 30Z",
+  "M18 34Q18 14 40 13Q62 15 62 35L57 29Q53 18 42 20Q29 18 22 32Z",
+  "M17 34Q18 13 40 13Q64 14 62 35Q56 28 57 21Q49 29 42 20Q32 29 22 27Z",
+  "M18 35Q17 15 40 13Q64 14 62 35L56 29Q54 22 50 19Q48 31 40 24Q32 31 25 27Z"
+];
 const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? "";
+const recentRoomsKey = "sesver.recentRooms";
+const legacyRecentRoomsKey = "sesegel.recentRooms";
+
+function loadRecentRooms(): RecentRoom[] {
+  try {
+    const savedValue =
+      localStorage.getItem(recentRoomsKey) ?? localStorage.getItem(legacyRecentRoomsKey) ?? "[]";
+    const saved: unknown = JSON.parse(savedValue);
+    if (!Array.isArray(saved)) return [];
+    const rooms = saved
+      .filter(
+        (item): item is RecentRoom =>
+          typeof item?.roomId === "string" &&
+          typeof item?.roomName === "string" &&
+          /^[0-9a-f-]{36}$/i.test(item.roomId)
+      )
+      .slice(0, 6);
+    if (!localStorage.getItem(recentRoomsKey) && localStorage.getItem(legacyRecentRoomsKey)) {
+      localStorage.setItem(recentRoomsKey, JSON.stringify(rooms));
+      localStorage.removeItem(legacyRecentRoomsKey);
+    }
+    return rooms;
+  } catch {
+    return [];
+  }
+}
 
 function roomIdFromInput(value: string) {
   const trimmed = value.trim();
@@ -37,6 +95,36 @@ async function apiRequest<T>(path: string, options?: RequestInit): Promise<T> {
     throw new Error(body.error || "İstek tamamlanamadı.");
   }
   return body;
+}
+
+function Avatar({ variant, className = "" }: { variant: number; className?: string }) {
+  const colors = avatarColors[((variant % avatarColors.length) + avatarColors.length) % avatarColors.length];
+  const hairstyle = hairstyles[variant % hairstyles.length];
+
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 80 80"
+      role="img"
+      aria-label="Rastgele avatar"
+      xmlns="http://www.w3.org/2000/svg"
+    >
+      <defs>
+        <linearGradient id={`avatar-bg-${variant}`} x1="0" y1="0" x2="1" y2="1">
+          <stop stopColor={colors[0]} />
+          <stop offset="1" stopColor={colors[1]} />
+        </linearGradient>
+      </defs>
+      <rect width="80" height="80" rx="40" fill={`url(#avatar-bg-${variant})`} />
+      <circle cx="40" cy="42" r="23" fill="#f4c7a5" />
+      <path d={hairstyle} fill={colors[2]} />
+      <path d="M16 80Q18 58 40 57Q62 58 64 80Z" fill={colors[2]} />
+      <path d="M31 43h1m16 0h1" stroke="#493c43" strokeLinecap="round" strokeWidth="3" />
+      <path d="M35 51q5 4 10 0" fill="none" stroke="#a85c5d" strokeLinecap="round" strokeWidth="2" />
+      <circle cx="22" cy="45" r="3" fill="#f4c7a5" />
+      <circle cx="58" cy="45" r="3" fill="#f4c7a5" />
+    </svg>
+  );
 }
 
 function MediaTrack({ track, video }: { track: Track; video: boolean }) {
@@ -64,16 +152,28 @@ export default function App() {
   const [roomId, setRoomId] = useState(
     () => new URLSearchParams(window.location.search).get("room") ?? ""
   );
+  const [roomName, setRoomName] = useState("");
+  const [recentRooms, setRecentRooms] = useState<RecentRoom[]>(loadRecentRooms);
   const [inviteUrl, setInviteUrl] = useState("");
+  const [entryAction, setEntryAction] = useState<EntryAction | null>(null);
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
+  const [avatarId, setAvatarId] = useState(() => Math.floor(Math.random() * avatarColors.length));
   const [connected, setConnected] = useState(false);
   const [microphoneEnabled, setMicrophoneEnabled] = useState(false);
   const [screenSharing, setScreenSharing] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [toast, setToast] = useState("");
   const [revision, setRevision] = useState(0);
+  const [speakingIdentities, setSpeakingIdentities] = useState<Set<string>>(() => new Set());
 
   useEffect(() => {
     const refresh = () => setRevision((value) => value + 1);
+    const updateActiveSpeakers = (speakers: Participant[]) => {
+      setSpeakingIdentities(new Set(speakers.map((speaker) => speaker.identity)));
+      refresh();
+    };
     const events = [
       RoomEvent.ParticipantConnected,
       RoomEvent.ParticipantDisconnected,
@@ -86,11 +186,19 @@ export default function App() {
       RoomEvent.ConnectionStateChanged
     ];
     events.forEach((event) => room.on(event, refresh));
+    room.on(RoomEvent.ActiveSpeakersChanged, updateActiveSpeakers);
     return () => {
       events.forEach((event) => room.off(event, refresh));
+      room.off(RoomEvent.ActiveSpeakersChanged, updateActiveSpeakers);
       void room.disconnect();
     };
   }, [room]);
+
+  useEffect(() => {
+    if (!toast) return;
+    const timeout = window.setTimeout(() => setToast(""), 2400);
+    return () => window.clearTimeout(timeout);
+  }, [toast]);
 
   const participants = useMemo(
     () => [room.localParticipant, ...room.remoteParticipants.values()],
@@ -135,38 +243,63 @@ export default function App() {
     [room, revision]
   );
 
-  async function joinRoom(id: string) {
-    setBusy(true);
+  function startEntry(action: EntryAction) {
+    setEntryAction(action);
     setError("");
-    try {
-      const normalizedRoomId = roomIdFromInput(id);
-      const result = await apiRequest<RoomTokenResponse>(
-        `/api/rooms/${encodeURIComponent(normalizedRoomId)}/token`,
-        { method: "POST" }
-      );
-      await room.connect(result.serverUrl, result.token);
-      await room.localParticipant.setMicrophoneEnabled(true);
-      setRoomId(normalizedRoomId);
-      setInviteUrl(result.inviteUrl);
-      window.history.replaceState(null, "", `?room=${encodeURIComponent(normalizedRoomId)}`);
-      setMicrophoneEnabled(true);
-      setConnected(true);
-    } catch (joinError) {
-      setError(joinError instanceof Error ? joinError.message : "Odaya katılınamadı.");
-    } finally {
-      setBusy(false);
-    }
   }
 
-  async function createRoom() {
+  function randomizeAvatar() {
+    setAvatarId((current) => (current + 1 + Math.floor(Math.random() * (avatarColors.length - 1))) % avatarColors.length);
+  }
+
+  async function submitEntry(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!entryAction) return;
+
     setBusy(true);
     setError("");
     try {
-      const invite = await apiRequest<InviteResponse>("/api/rooms", { method: "POST" });
-      setInviteUrl(invite.inviteUrl);
-      await joinRoom(invite.roomId);
-    } catch (createError) {
-      setError(createError instanceof Error ? createError.message : "Oda oluşturulamadı.");
+      let normalizedRoomId: string;
+      if (entryAction.type === "create") {
+        const invite = await apiRequest<InviteResponse>("/api/rooms", { method: "POST" });
+        normalizedRoomId = invite.roomId;
+      } else {
+        normalizedRoomId = roomIdFromInput(entryAction.roomId ?? "");
+      }
+
+      const result = await apiRequest<RoomTokenResponse>(
+        `/api/rooms/${encodeURIComponent(normalizedRoomId)}/token`,
+        {
+          method: "POST",
+          body: JSON.stringify({ firstName, lastName, avatarId })
+        }
+      );
+      await room.connect(result.serverUrl, result.token);
+      setRoomId(normalizedRoomId);
+      setRoomName(result.roomName);
+      setInviteUrl(result.inviteUrl);
+      const updatedRecentRooms = [
+        { roomId: normalizedRoomId, roomName: result.roomName },
+        ...recentRooms.filter((recentRoom) => recentRoom.roomId !== normalizedRoomId)
+      ].slice(0, 6);
+      setRecentRooms(updatedRecentRooms);
+      try {
+        localStorage.setItem(recentRoomsKey, JSON.stringify(updatedRecentRooms));
+      } catch {
+        setError("Odaya katıldın ancak son odalar listesi kaydedilemedi.");
+      }
+      window.history.replaceState(null, "", `?room=${encodeURIComponent(normalizedRoomId)}`);
+      setConnected(true);
+      setEntryAction(null);
+      try {
+        await room.localParticipant.setMicrophoneEnabled(true);
+        setMicrophoneEnabled(true);
+      } catch {
+        setError("Odaya katıldın ancak mikrofon açılamadı. Tarayıcı mikrofon iznini ve cihazını kontrol et.");
+      }
+    } catch (joinError) {
+      setError(joinError instanceof Error ? joinError.message : "Odaya bağlanılamadı.");
+    } finally {
       setBusy(false);
     }
   }
@@ -194,6 +327,7 @@ export default function App() {
   async function copyInvite() {
     try {
       await navigator.clipboard.writeText(inviteUrl);
+      setToast("Davet bağlantısı kopyalandı");
     } catch {
       setError("Bağlantı kopyalanamadı. Tarayıcı izinlerini kontrol edin.");
     }
@@ -209,11 +343,11 @@ export default function App() {
   }
 
   return (
-    <main className="app-shell">
+    <main className={`app-shell ${connected ? "room-shell" : ""}`}>
       <header className="topbar">
-        <a className="brand" href="/" aria-label="Sesli Oda ana sayfa">
+        <a className="brand" href="/" aria-label="Sesver ana sayfa">
           <span className="brand-mark">S</span>
-          <span>sesli oda</span>
+          <span>Sesver</span>
         </a>
         <span className="topbar-note">Hesap yok, davet bağlantısı yeterli.</span>
       </header>
@@ -224,6 +358,12 @@ export default function App() {
           <button type="button" onClick={() => setError("")} aria-label="Uyarıyı kapat">
             ×
           </button>
+        </div>
+      )}
+      {toast && (
+        <div className="copy-toast" role="status">
+          <span aria-hidden="true">✓</span>
+          {toast}
         </div>
       )}
 
@@ -237,8 +377,12 @@ export default function App() {
               Kayıt olmak gerekmez.
             </p>
             <div className="welcome-actions">
-              <button className="button button-primary" onClick={createRoom} disabled={busy}>
-                {busy ? "Oda hazırlanıyor..." : "Yeni oda oluştur"}
+              <button
+                className="button button-primary"
+                onClick={() => startEntry({ type: "create" })}
+                disabled={busy}
+              >
+                Yeni oda oluştur
               </button>
               <div className="join-row">
                 <input
@@ -247,12 +391,14 @@ export default function App() {
                   onChange={(event) => setRoomId(event.target.value)}
                   placeholder="Oda bağlantısını veya kodunu yapıştır"
                   onKeyDown={(event) => {
-                    if (event.key === "Enter" && roomId.trim()) void joinRoom(roomId.trim());
+                    if (event.key === "Enter" && roomId.trim()) {
+                      startEntry({ type: "join", roomId: roomId.trim() });
+                    }
                   }}
                 />
                 <button
                   className="button button-secondary"
-                  onClick={() => void joinRoom(roomId.trim())}
+                  onClick={() => startEntry({ type: "join", roomId: roomId.trim() })}
                   disabled={busy || !roomId.trim()}
                 >
                   Katıl
@@ -264,6 +410,31 @@ export default function App() {
               <span>● 20 kişiye kadar</span>
               <span>● Ses ve ekran paylaşımı</span>
             </div>
+            {recentRooms.length > 0 && (
+              <div className="recent-rooms">
+                <div className="recent-rooms-heading">
+                  <span>SON ODALAR</span>
+                  <span>{recentRooms.length}</span>
+                </div>
+                <div className="recent-room-list">
+                  {recentRooms.map((recentRoom) => (
+                    <button
+                      className="recent-room"
+                      key={recentRoom.roomId}
+                      onClick={() => startEntry({ type: "join", roomId: recentRoom.roomId })}
+                      disabled={busy}
+                    >
+                      <span className="recent-room-icon" aria-hidden="true">⌖</span>
+                      <span className="recent-room-details">
+                        <strong>{recentRoom.roomName}</strong>
+                        <small>Başkent odası</small>
+                      </span>
+                      <span className="recent-room-arrow" aria-hidden="true">↗</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
           <div className="welcome-art" aria-hidden="true">
             <div className="orbit orbit-one" />
@@ -279,73 +450,112 @@ export default function App() {
         </section>
       ) : (
         <section className="room-layout">
-          <div className="room-heading">
+          <header className="room-heading">
             <div>
-              <span className="eyebrow">CANLI ODA</span>
-              <h1>Birlikte konuşalım</h1>
+              <span className="room-kicker"><span className="connection-dot" /> SES GEL BULUŞMASI</span>
+              <h1>{roomName}</h1>
+              <p className="room-subtitle">Sesini aç, sohbete katıl.</p>
             </div>
-            <div className="invite-control">
-              <span className="connection-dot" />
-              <span>Bağlantı açık</span>
-              <button className="button button-secondary" onClick={copyInvite}>
-                Bağlantıyı kopyala
+            <div className="room-heading-actions">
+              <span className="live-pill"><span className="connection-dot" /> Canlı</span>
+              <button className="button button-secondary invite-button" onClick={copyInvite}>
+                <span aria-hidden="true">↗</span> Davet bağlantısı
               </button>
             </div>
-          </div>
+          </header>
           <div className="room-content">
             <div className="stage">
               {screenTracks.length ? (
                 screenTracks.map(({ identity, track }) => (
                   <div className="screen-tile" key={`${identity}-${track.sid}`}>
                     <MediaTrack track={track} video />
-                    <span>{identity} ekran paylaşıyor</span>
+                    <span>{room.localParticipant.identity === identity ? "Sen" : "Bir katılımcı"} ekran paylaşıyor</span>
                   </div>
                 ))
               ) : (
                 <div className="empty-stage">
-                  <div className="screen-icon">▣</div>
-                  <h2>Bir ekran paylaşımı başlat</h2>
-                  <p>Ekranını aç, birlikte bakın ve konuşun.</p>
+                  <div className="stage-visual" aria-hidden="true">
+                    <span className="stage-orbit stage-orbit-one" />
+                    <span className="stage-orbit stage-orbit-two" />
+                    <div className="stage-avatar-stack">
+                      {participants.slice(0, 3).map((participant) => (
+                        <span
+                          key={participant.identity}
+                          className={`speaker-avatar stage-speaker-avatar ${speakingIdentities.has(participant.identity) ? "speaker-speaking" : ""}`}
+                        >
+                          <Avatar
+                            variant={getAvatarId(participant.metadata, participant.identity)}
+                            className="stage-avatar"
+                          />
+                        </span>
+                      ))}
+                    </div>
+                    <span className="stage-wave"><i /><i /><i /><i /><i /><i /><i /></span>
+                  </div>
+                  <span className="stage-caption">ODA HAZIR</span>
+                  <h2>Güzel sohbetler burada başlar.</h2>
+                  <p>Ekranını paylaş ya da mikrofonunu açıp sohbete katıl.</p>
                   <button
-                    className="button button-secondary"
+                    className="button button-primary stage-share-button"
                     onClick={() => void toggleScreenShare()}
                   >
-                    Ekranımı paylaş
+                    <span aria-hidden="true">▣</span> Ekranımı paylaş
                   </button>
                 </div>
               )}
             </div>
             <aside className="people-panel">
               <div className="panel-title">
-                <h2>Odadakiler</h2>
-                <span>{participants.length} / 20</span>
+                <div>
+                  <span className="panel-eyebrow">TOPLULUK</span>
+                  <h2>Katılımcılar</h2>
+                </div>
+                <span className="participant-count">{participants.length}<small> / 20</small></span>
               </div>
               <div className="participant-list">
-                {participants.map((participant, index) => (
-                  <div className="participant" key={participant.identity}>
-                    <span className={`avatar avatar-${index % 3}`}>
-                      {(participant.name || "M").slice(0, 1).toUpperCase()}
-                    </span>
-                    <span className="participant-name">
-                      {participant.name || "Misafir"}
-                      {participant === room.localParticipant && <small> (sen)</small>}
-                    </span>
-                    <span
-                      className={`mic-indicator ${
-                        participant.isMicrophoneEnabled ? "mic-on" : ""
-                      }`}
-                      aria-label={
-                        participant.isMicrophoneEnabled ? "Mikrofon açık" : "Mikrofon kapalı"
-                      }
+                {participants.map((participant) => {
+                  const isLocal = participant === room.localParticipant;
+                  const isSpeaking = speakingIdentities.has(participant.identity);
+                  return (
+                    <div
+                      className={`participant ${isLocal ? "participant-local" : ""} ${isSpeaking ? "participant-speaking" : ""}`}
+                      key={participant.identity}
                     >
-                      {participant.isMicrophoneEnabled ? "♫" : "×"}
-                    </span>
-                  </div>
-                ))}
+                      <span className={`speaker-avatar participant-speaker-avatar ${isSpeaking ? "speaker-speaking" : ""}`}>
+                        <Avatar
+                          variant={getAvatarId(participant.metadata, participant.identity)}
+                          className="participant-avatar"
+                        />
+                      </span>
+                      <span className="participant-name">
+                        {participant.name || "Katılımcı"}
+                        <small className={isSpeaking ? "speaker-status" : ""}>
+                          {isSpeaking
+                            ? "Konuşuyor"
+                            : isLocal
+                              ? "Sen"
+                              : participant.isMicrophoneEnabled
+                                ? "Mikrofon açık"
+                                : "Sessiz"}
+                        </small>
+                      </span>
+                      <span
+                        className={`mic-indicator ${
+                          isSpeaking ? "mic-speaking" : participant.isMicrophoneEnabled ? "mic-on" : ""
+                        }`}
+                        aria-label={
+                          isSpeaking ? "Şu anda konuşuyor" : participant.isMicrophoneEnabled ? "Mikrofon açık, konuşmuyor" : "Mikrofon kapalı"
+                        }
+                      >
+                        {isSpeaking ? "♫" : participant.isMicrophoneEnabled ? "●" : "×"}
+                      </span>
+                    </div>
+                  );
+                })}
               </div>
               <div className="privacy-note">
-                <span>🔒</span>
-                <p>Odaya yalnızca davet bağlantısını paylaşan kişiler katılabilir.</p>
+                <span aria-hidden="true">✦</span>
+                <p>Bu oda davet bağlantısıyla katılıma açıktır.</p>
               </div>
             </aside>
           </div>
@@ -359,22 +569,98 @@ export default function App() {
               className={`control-button ${microphoneEnabled ? "control-active" : "control-muted"}`}
               onClick={() => void toggleMicrophone()}
             >
-              <span>{microphoneEnabled ? "♫" : "×"}</span>
-              {microphoneEnabled ? "Mikrofon açık" : "Mikrofon kapalı"}
+              <span className="control-icon">{microphoneEnabled ? "♫" : "×"}</span>
+              <span className="control-label">{microphoneEnabled ? "Mikrofon" : "Mikrofon kapalı"}</span>
             </button>
             <button
               className={`control-button ${screenSharing ? "control-active" : ""}`}
               onClick={() => void toggleScreenShare()}
             >
-              <span>▣</span>
-              {screenSharing ? "Paylaşımı durdur" : "Ekran paylaş"}
+              <span className="control-icon">▣</span>
+              <span className="control-label">{screenSharing ? "Paylaşımı durdur" : "Ekran paylaş"}</span>
             </button>
             <button className="button button-leave" onClick={() => void leaveRoom()}>
-              Odadan ayrıl
+              <span aria-hidden="true">↗</span><span className="control-label">Odadan ayrıl</span>
             </button>
           </footer>
         </section>
       )}
+      {entryAction && !connected && (
+        <div className="entry-backdrop" onMouseDown={() => !busy && setEntryAction(null)}>
+          <form
+            className="entry-dialog"
+            aria-labelledby="entry-title"
+            onSubmit={submitEntry}
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            <button
+              className="entry-close"
+              type="button"
+              aria-label="Pencereyi kapat"
+              onClick={() => setEntryAction(null)}
+              disabled={busy}
+            >
+              ×
+            </button>
+            <span className="entry-kicker">SESEGEL’E HOŞ GELDİN</span>
+            <h2 id="entry-title">Seni nasıl tanıyalım?</h2>
+            <p className="entry-description">Katılımcıların seni tanıması için adını ve soyadını yaz.</p>
+            <div className="entry-avatar-row">
+              <Avatar variant={avatarId} className="entry-avatar" />
+              <div>
+                <strong>Senin avatarın</strong>
+                <span>Her girişte sana özel bir çizim.</span>
+              </div>
+              <button className="avatar-shuffle" type="button" onClick={randomizeAvatar} aria-label="Rastgele avatar değiştir">
+                Karıştır
+              </button>
+            </div>
+            <div className="name-fields">
+              <label>
+                Ad
+                <input
+                  autoFocus
+                  autoComplete="given-name"
+                  maxLength={40}
+                  required
+                  value={firstName}
+                  onChange={(event) => setFirstName(event.target.value)}
+                  placeholder="Adın"
+                />
+              </label>
+              <label>
+                Soyad
+                <input
+                  autoComplete="family-name"
+                  maxLength={40}
+                  required
+                  value={lastName}
+                  onChange={(event) => setLastName(event.target.value)}
+                  placeholder="Soyadın"
+                />
+              </label>
+            </div>
+            <button className="button button-primary entry-submit" type="submit" disabled={busy}>
+              {busy ? "Bağlanıyor..." : entryAction.type === "create" ? "Odayı oluştur ve katıl" : "Odaya katıl"}
+            </button>
+          </form>
+        </div>
+      )}
     </main>
   );
+}
+
+function getAvatarId(metadata: string | undefined, identity: string) {
+  if (metadata) {
+    try {
+      const value: unknown = JSON.parse(metadata).avatarId;
+      if (typeof value === "number" && Number.isInteger(value) && value >= 0 && value < avatarColors.length) {
+        return value;
+      }
+    } catch {
+      // Older or custom participants may not provide avatar metadata.
+    }
+  }
+
+  return Array.from(identity).reduce((total, character) => total + character.charCodeAt(0), 0) % avatarColors.length;
 }

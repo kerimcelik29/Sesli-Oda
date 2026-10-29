@@ -1,25 +1,30 @@
-services:
-  livekit:
-    image: livekit/livekit-server:v1.8.4
-    command: --dev --bind 0.0.0.0
-    ports:
-      - "7880:7880"
-      - "7881:7881/udp"
-      - "50000-50100:50000-50100/udp"
+name: sesver
 
+services:
   api:
     build:
       context: .
       dockerfile: server.Dockerfile
     environment:
-      API_PORT: 3001
-      APP_PUBLIC_URL: ${APP_PUBLIC_URL:-http://localhost:5173}
-      APP_ORIGIN: ${APP_ORIGIN:-http://localhost:5173}
-      LIVEKIT_API_URL: http://livekit:7880
-      LIVEKIT_WS_URL: ${LIVEKIT_WS_URL:-ws://localhost:7880}
-      LIVEKIT_API_KEY: devkey
-      LIVEKIT_API_SECRET: secret
+      API_PORT: "3001"
+      APP_PUBLIC_URL: ${APP_PUBLIC_URL:-https://sesver.online}
+      APP_ORIGIN: ${APP_ORIGIN:-https://sesver.online}
+      LIVEKIT_API_URL: ${LIVEKIT_API_URL:-http://host.docker.internal:7880}
+      LIVEKIT_WS_URL: ${LIVEKIT_WS_URL:?Set LIVEKIT_WS_URL to the existing LiveKit public WebSocket URL}
+      LIVEKIT_API_KEY: ${LIVEKIT_API_KEY:?Set LIVEKIT_API_KEY for the existing LiveKit server}
+      LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET:?Set LIVEKIT_API_SECRET for the existing LiveKit server}
     ports:
-      - "3001:3001"
+      - "127.0.0.1:${API_HOST_PORT:-13001}:3001"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
+
+  web:
+    build:
+      context: .
+      dockerfile: web.Dockerfile
+    ports:
+      - "127.0.0.1:${APP_PORT:-18080}:80"
     depends_on:
-      - livekit
+      - api
+    restart: unless-stopped
