@@ -25,6 +25,20 @@ type RecentRoom = {
   roomName: string;
 };
 
+type SavedProfile = {
+  firstName: string;
+  lastName: string;
+  avatarId: number;
+};
+
+type ChatMessage = {
+  id: string;
+  senderIdentity: string;
+  senderName: string;
+  text: string;
+  timestamp: number;
+};
+
 const avatarColors = [
   ["#b7f3e6", "#42b99e", "#285e57"],
   ["#ffe0bd", "#e78b5a", "#633d58"],
@@ -48,6 +62,10 @@ const hairstyles = [
 const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? "";
 const recentRoomsKey = "sesver.recentRooms";
 const legacyRecentRoomsKey = "sesegel.recentRooms";
+const savedProfileKey = "sesver.profile";
+const chatTopic = "sesver-chat";
+const maxChatMessages = 100;
+const maxChatMessageLength = 500;
 
 function loadRecentRooms(): RecentRoom[] {
   try {
@@ -71,6 +89,34 @@ function loadRecentRooms(): RecentRoom[] {
   } catch {
     return [];
   }
+}
+
+function loadSavedProfile(): SavedProfile | null {
+  try {
+    const saved: unknown = JSON.parse(localStorage.getItem(savedProfileKey) ?? "null");
+    if (
+      typeof saved === "object" &&
+      saved !== null &&
+      "firstName" in saved &&
+      "lastName" in saved &&
+      "avatarId" in saved &&
+      typeof saved.firstName === "string" &&
+      typeof saved.lastName === "string" &&
+      typeof saved.avatarId === "number" &&
+      Number.isInteger(saved.avatarId) &&
+      saved.avatarId >= 0 &&
+      saved.avatarId < avatarColors.length
+    ) {
+      return {
+        firstName: saved.firstName,
+        lastName: saved.lastName,
+        avatarId: saved.avatarId
+      };
+    }
+  } catch {
+    return null;
+  }
+  return null;
 }
 
 function roomIdFromInput(value: string) {
@@ -154,11 +200,16 @@ export default function App() {
   );
   const [roomName, setRoomName] = useState("");
   const [recentRooms, setRecentRooms] = useState<RecentRoom[]>(loadRecentRooms);
+  const [savedProfile, setSavedProfile] = useState<SavedProfile | null>(loadSavedProfile);
   const [inviteUrl, setInviteUrl] = useState("");
   const [entryAction, setEntryAction] = useState<EntryAction | null>(null);
-  const [firstName, setFirstName] = useState("");
-  const [lastName, setLastName] = useState("");
-  const [avatarId, setAvatarId] = useState(() => Math.floor(Math.random() * avatarColors.length));
+  const [firstName, setFirstName] = useState(() => loadSavedProfile()?.firstName ?? "");
+  const [lastName, setLastName] = useState(() => loadSavedProfile()?.lastName ?? "");
+  const [avatarId, setAvatarId] = useState(
+    () => loadSavedProfile()?.avatarId ?? Math.floor(Math.random() * avatarColors.length)
+  );
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [chatDraft, setChatDraft] = useState("");
   const [connected, setConnected] = useState(false);
   const [microphoneEnabled, setMicrophoneEnabled] = useState(false);
   const [screenSharing, setScreenSharing] = useState(false);
@@ -183,13 +234,52 @@ export default function App() {
       RoomEvent.TrackUnpublished,
       RoomEvent.TrackMuted,
       RoomEvent.TrackUnmuted,
-      RoomEvent.ConnectionStateChanged
+      RoomEvent.ConnectionStateChanged,
+      RoomEvent.DataReceived
     ];
     events.forEach((event) => room.on(event, refresh));
     room.on(RoomEvent.ActiveSpeakersChanged, updateActiveSpeakers);
+    const handleDataReceived = (
+      payload: Uint8Array,
+      participant?: Participant,
+      _kind?: unknown,
+      topic?: string
+    ) => {
+      if (topic !== chatTopic || !participant) return;
+      try {
+        const message: unknown = JSON.parse(new TextDecoder().decode(payload));
+        if (
+          typeof message === "object" &&
+          message !== null &&
+          "text" in message
+        ) {
+          const text = message.text;
+          if (
+            typeof text === "string" &&
+            text.trim().length > 0 &&
+            text.length <= maxChatMessageLength
+          ) {
+            setChatMessages((current) => [
+              ...current.slice(-(maxChatMessages - 1)),
+              {
+                id: `${participant.identity}-${Date.now()}-${Math.random()}`,
+                senderIdentity: participant.identity,
+                senderName: participant.name || "Katılımcı",
+                text: text.trim(),
+                timestamp: Date.now()
+              }
+            ]);
+          }
+        }
+      } catch {
+        setError("Sohbet mesajı okunamadı.");
+      }
+    };
+    room.on(RoomEvent.DataReceived, handleDataReceived);
     return () => {
       events.forEach((event) => room.off(event, refresh));
       room.off(RoomEvent.ActiveSpeakersChanged, updateActiveSpeakers);
+      room.off(RoomEvent.DataReceived, handleDataReceived);
       void room.disconnect();
     };
   }, [room]);
@@ -199,6 +289,11 @@ export default function App() {
     const timeout = window.setTimeout(() => setToast(""), 2400);
     return () => window.clearTimeout(timeout);
   }, [toast]);
+
+  const latestChatMessageRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    latestChatMessageRef.current?.scrollIntoView({ block: "end", behavior: "smooth" });
+  }, [chatMessages]);
 
   const participants = useMemo(
     () => [room.localParticipant, ...room.remoteParticipants.values()],
@@ -244,40 +339,50 @@ export default function App() {
   );
 
   function startEntry(action: EntryAction) {
-    setEntryAction(action);
     setError("");
+    if (savedProfile) {
+      void enterRoom(action, savedProfile);
+      return;
+    }
+    setEntryAction(action);
   }
 
   function randomizeAvatar() {
     setAvatarId((current) => (current + 1 + Math.floor(Math.random() * (avatarColors.length - 1))) % avatarColors.length);
   }
 
-  async function submitEntry(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!entryAction) return;
-
+  async function enterRoom(action: EntryAction, profile: SavedProfile) {
     setBusy(true);
     setError("");
     try {
       let normalizedRoomId: string;
-      if (entryAction.type === "create") {
+      if (action.type === "create") {
         const invite = await apiRequest<InviteResponse>("/api/rooms", { method: "POST" });
         normalizedRoomId = invite.roomId;
       } else {
-        normalizedRoomId = roomIdFromInput(entryAction.roomId ?? "");
+        normalizedRoomId = roomIdFromInput(action.roomId ?? "");
       }
 
       const result = await apiRequest<RoomTokenResponse>(
         `/api/rooms/${encodeURIComponent(normalizedRoomId)}/token`,
         {
           method: "POST",
-          body: JSON.stringify({ firstName, lastName, avatarId })
+          body: JSON.stringify(profile)
         }
       );
       await room.connect(result.serverUrl, result.token);
       setRoomId(normalizedRoomId);
       setRoomName(result.roomName);
       setInviteUrl(result.inviteUrl);
+      setFirstName(profile.firstName);
+      setLastName(profile.lastName);
+      setAvatarId(profile.avatarId);
+      setSavedProfile(profile);
+      try {
+        localStorage.setItem(savedProfileKey, JSON.stringify(profile));
+      } catch {
+        setError("Odaya katıldın ancak adın bu cihazda kaydedilemedi.");
+      }
       const updatedRecentRooms = [
         { roomId: normalizedRoomId, roomName: result.roomName },
         ...recentRooms.filter((recentRoom) => recentRoom.roomId !== normalizedRoomId)
@@ -301,6 +406,38 @@ export default function App() {
       setError(joinError instanceof Error ? joinError.message : "Odaya bağlanılamadı.");
     } finally {
       setBusy(false);
+    }
+  }
+
+  function submitEntry(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!entryAction) return;
+    void enterRoom(entryAction, { firstName, lastName, avatarId });
+  }
+
+  async function sendChatMessage(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const text = chatDraft.trim().slice(0, maxChatMessageLength);
+    if (!text || !connected) return;
+
+    try {
+      await room.localParticipant.publishData(
+        new TextEncoder().encode(JSON.stringify({ text })),
+        { reliable: true, topic: chatTopic }
+      );
+      setChatMessages((current) => [
+        ...current.slice(-(maxChatMessages - 1)),
+        {
+          id: `${room.localParticipant.identity}-${Date.now()}-${Math.random()}`,
+          senderIdentity: room.localParticipant.identity,
+          senderName: room.localParticipant.name || `${firstName} ${lastName}`,
+          text,
+          timestamp: Date.now()
+        }
+      ]);
+      setChatDraft("");
+    } catch (chatError) {
+      setError(chatError instanceof Error ? chatError.message : "Mesaj gönderilemedi.");
     }
   }
 
@@ -339,6 +476,8 @@ export default function App() {
     setMicrophoneEnabled(false);
     setScreenSharing(false);
     setInviteUrl("");
+    setChatMessages([]);
+    setChatDraft("");
     window.history.replaceState(null, "", window.location.pathname);
   }
 
@@ -474,20 +613,22 @@ export default function App() {
                 ))
               ) : (
                 <div className="empty-stage">
-                  <div className="stage-visual" aria-hidden="true">
+                  <div className="stage-visual">
                     <span className="stage-orbit stage-orbit-one" />
                     <span className="stage-orbit stage-orbit-two" />
                     <div className="stage-avatar-stack">
                       {participants.slice(0, 3).map((participant) => (
-                        <span
-                          key={participant.identity}
-                          className={`speaker-avatar stage-speaker-avatar ${speakingIdentities.has(participant.identity) ? "speaker-speaking" : ""}`}
-                        >
-                          <Avatar
-                            variant={getAvatarId(participant.metadata, participant.identity)}
-                            className="stage-avatar"
-                          />
-                        </span>
+                        <div className="stage-person" key={participant.identity}>
+                          <span
+                            className={`speaker-avatar stage-speaker-avatar ${speakingIdentities.has(participant.identity) ? "speaker-speaking" : ""}`}
+                          >
+                            <Avatar
+                              variant={getAvatarId(participant.metadata, participant.identity)}
+                              className="stage-avatar"
+                            />
+                          </span>
+                          <span className="stage-person-name">{participant.name || "Katılımcı"}</span>
+                        </div>
                       ))}
                     </div>
                     <span className="stage-wave"><i /><i /><i /><i /><i /><i /><i /></span>
@@ -553,6 +694,59 @@ export default function App() {
                   );
                 })}
               </div>
+              <section className="chat-panel" aria-label="Oda sohbeti">
+                <div className="chat-heading">
+                  <div>
+                    <span className="panel-eyebrow">YAZILI SOHBET</span>
+                    <h2>Sohbet</h2>
+                  </div>
+                  <span className="chat-message-count">{chatMessages.length}</span>
+                </div>
+                <div className="chat-messages" aria-live="polite">
+                  {chatMessages.length === 0 ? (
+                    <p className="chat-empty">Henüz mesaj yok. İlk mesajı sen gönder.</p>
+                  ) : (
+                    chatMessages.map((message) => (
+                      <article
+                        className={`chat-message ${message.senderIdentity === room.localParticipant.identity ? "chat-message-own" : ""}`}
+                        key={message.id}
+                      >
+                        <div className="chat-message-meta">
+                          <strong>{message.senderName}</strong>
+                          <time>{new Date(message.timestamp).toLocaleTimeString("tr-TR", {
+                            hour: "2-digit",
+                            minute: "2-digit"
+                          })}</time>
+                        </div>
+                        <p>{message.text}</p>
+                      </article>
+                    ))
+                  )}
+                  <div ref={latestChatMessageRef} />
+                </div>
+                <form className="chat-form" onSubmit={sendChatMessage}>
+                  <input
+                    aria-label="Sohbet mesajı"
+                    maxLength={maxChatMessageLength}
+                    value={chatDraft}
+                    onChange={(event) => setChatDraft(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" && !event.shiftKey) {
+                        event.preventDefault();
+                        event.currentTarget.form?.requestSubmit();
+                      }
+                    }}
+                    placeholder="Mesaj yaz..."
+                  />
+                  <button
+                    type="submit"
+                    aria-label="Mesajı gönder"
+                    disabled={!chatDraft.trim()}
+                  >
+                    ↑
+                  </button>
+                </form>
+              </section>
               <div className="privacy-note">
                 <span aria-hidden="true">✦</span>
                 <p>Bu oda davet bağlantısıyla katılıma açıktır.</p>
@@ -609,7 +803,7 @@ export default function App() {
               <Avatar variant={avatarId} className="entry-avatar" />
               <div>
                 <strong>Senin avatarın</strong>
-                <span>Her girişte sana özel bir çizim.</span>
+                <span>Diğer katılımcılar seni bu avatarla görür.</span>
               </div>
               <button className="avatar-shuffle" type="button" onClick={randomizeAvatar} aria-label="Rastgele avatar değiştir">
                 Karıştır
