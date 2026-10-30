@@ -55,11 +55,35 @@ const avatarColors = [
   ["#e4edc4", "#98a94f", "#515b3e"]
 ];
 const hairstyles = [
-  "M18 35Q18 12 40 13Q63 13 62 36L58 29Q50 25 44 19Q35 29 22 30Z",
-  "M18 34Q18 14 40 13Q62 15 62 35L57 29Q53 18 42 20Q29 18 22 32Z",
-  "M17 34Q18 13 40 13Q64 14 62 35Q56 28 57 21Q49 29 42 20Q32 29 22 27Z",
-  "M18 35Q17 15 40 13Q64 14 62 35L56 29Q54 22 50 19Q48 31 40 24Q32 31 25 27Z"
+  "M17 37Q13 10 40 10Q67 10 63 38L67 69Q57 66 55 55L56 31Q40 17 24 31L25 55Q23 66 13 69Z",
+  "M17 36Q16 11 40 11Q64 11 63 37L67 66Q57 64 54 53L56 30Q42 18 24 30L26 53Q22 64 13 66Z",
+  "M16 37Q13 9 40 10Q67 9 64 38L67 70Q56 66 55 53L57 31Q48 27 42 18Q33 29 23 30L25 54Q22 67 13 70Z",
+  "M17 36Q15 10 40 10Q66 10 63 38L69 63Q59 63 55 52L57 30Q43 18 24 30L25 52Q21 63 11 63Z",
+  "M15 39Q10 8 40 9Q70 8 65 39L70 70Q59 65 55 54L57 30Q40 15 23 30L25 54Q21 65 10 70Z",
+  "M17 37Q15 10 40 10Q65 10 63 38L67 68Q57 65 54 54L56 32Q40 18 24 31L25 54Q22 65 13 68Z",
+  "M17 36Q16 12 40 12Q64 12 63 36L58 31Q56 17 45 18Q34 17 22 32Z",
+  "M18 36Q18 12 40 12Q62 12 62 36L57 30L55 22Q49 31 42 23Q32 31 23 29Z",
+  "M17 38Q12 11 40 10Q68 11 63 38L57 30Q54 20 47 17Q35 28 22 31Z",
+  "M18 36Q18 14 40 12Q62 14 62 36L57 28Q51 24 48 18Q45 29 38 24Q30 31 22 29Z",
+  "M16 38Q16 9 40 11Q65 10 64 38L59 31Q55 18 44 18Q33 18 21 32Z",
+  "M18 36Q18 13 40 12Q62 13 62 36L57 31Q54 21 49 19Q43 30 36 24Q29 31 22 29Z"
 ];
+const skinTones = ["#f5d0b5", "#e7b58f", "#c98f6b", "#9d654d", "#754a3b", "#f0c4a0"];
+const shirtColors = ["#315e58", "#5a4a75", "#2f6680", "#8a594b", "#64743f", "#784c68"];
+const feminineNames = new Set([
+  "ada", "adalet", "aleyna", "asli", "asuman", "ayca", "aydan", "ayla", "aylin", "aysel",
+  "ayse", "azra", "bahar", "banu", "basak", "beren", "berfin", "beste", "betul", "beyza",
+  "bilge", "birgul", "busra", "cansu", "cemre", "cigdem", "damla", "defne", "dilan",
+  "dilara", "dilek", "duygu", "eda", "elif", "emine", "esin", "esma", "esra", "ebru",
+  "ezgi", "fatma", "feyza", "gamze", "gizem", "gokce", "gul", "gulcan", "gulizar",
+  "gulsah", "gulsum", "gulsen", "hande", "hatice", "hayat", "hilal", "hulya", "ipek",
+  "irem", "kader", "kamile", "kubra", "lejla", "makbule", "melike", "melis", "merve",
+  "mine", "muberra", "naz", "nazli", "necla", "nevin", "nihan", "nur", "nuray", "ozge",
+  "ozlem", "pinar", "rana", "seda", "selin", "sena", "sevil", "sibel", "sinem", "su",
+  "safiye", "sahra", "saliha", "sara", "sare", "seher", "selma", "semra", "serap",
+  "seren", "sevda", "sevgi", "sila", "simay", "sule", "sultan", "tugba", "tulin",
+  "yasemin", "yagmur", "yesim", "zeynep", "zuhal"
+]);
 const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? "";
 const recentRoomsKey = "sesver.recentRooms";
 const legacyRecentRoomsKey = "sesegel.recentRooms";
@@ -67,6 +91,22 @@ const savedProfileKey = "sesver.profile";
 const chatTopic = "sesver-chat";
 const maxChatMessages = 100;
 const maxChatMessageLength = 500;
+
+function feminineAvatarForName(firstName: string): number | null {
+  const firstWord = firstName
+    .trim()
+    .split(/\s+/)[0]
+    ?.toLocaleLowerCase("tr-TR")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+  if (!firstWord || !feminineNames.has(firstWord)) return null;
+
+  const nameHash = Array.from(firstWord).reduce(
+    (total, character) => total + character.charCodeAt(0),
+    0
+  );
+  return nameHash % 6;
+}
 
 function loadRecentRooms(): RecentRoom[] {
   try {
@@ -111,7 +151,7 @@ function loadSavedProfile(): SavedProfile | null {
       return {
         firstName: saved.firstName,
         lastName: saved.lastName,
-        avatarId: saved.avatarId
+        avatarId: feminineAvatarForName(saved.firstName) ?? saved.avatarId
       };
     }
   } catch {
@@ -145,8 +185,14 @@ async function apiRequest<T>(path: string, options?: RequestInit): Promise<T> {
 }
 
 function Avatar({ variant, className = "" }: { variant: number; className?: string }) {
-  const colors = avatarColors[((variant % avatarColors.length) + avatarColors.length) % avatarColors.length];
-  const hairstyle = hairstyles[variant % hairstyles.length];
+  const avatarIndex = ((variant % avatarColors.length) + avatarColors.length) % avatarColors.length;
+  const colors = avatarColors[avatarIndex];
+  const hairstyle = hairstyles[avatarIndex];
+  const skinTone = skinTones[avatarIndex % skinTones.length];
+  const shirtColor = shirtColors[avatarIndex % shirtColors.length];
+  const hasGlasses = avatarIndex === 6 || avatarIndex === 10;
+  const hasMustache = avatarIndex === 8 || avatarIndex === 9;
+  const hasEarrings = avatarIndex === 0 || avatarIndex === 2 || avatarIndex === 4;
 
   return (
     <svg
@@ -163,13 +209,33 @@ function Avatar({ variant, className = "" }: { variant: number; className?: stri
         </linearGradient>
       </defs>
       <rect width="80" height="80" rx="40" fill={`url(#avatar-bg-${variant})`} />
-      <circle cx="40" cy="42" r="23" fill="#f4c7a5" />
+      <path d="M13 80Q16 57 40 57Q64 57 67 80Z" fill={shirtColor} />
+      <path d="M30 59Q40 69 50 59L55 80H25Z" fill="#ffffff20" />
+      <circle cx="19" cy="45" r="4" fill={skinTone} />
+      <circle cx="61" cy="45" r="4" fill={skinTone} />
+      <ellipse cx="40" cy="42" rx={avatarIndex % 3 === 0 ? 21 : 22} ry="24" fill={skinTone} />
       <path d={hairstyle} fill={colors[2]} />
-      <path d="M16 80Q18 58 40 57Q62 58 64 80Z" fill={colors[2]} />
-      <path d="M31 43h1m16 0h1" stroke="#493c43" strokeLinecap="round" strokeWidth="3" />
-      <path d="M35 51q5 4 10 0" fill="none" stroke="#a85c5d" strokeLinecap="round" strokeWidth="2" />
-      <circle cx="22" cy="45" r="3" fill="#f4c7a5" />
-      <circle cx="58" cy="45" r="3" fill="#f4c7a5" />
+      {avatarIndex === 5 && (
+        <path d="M19 27Q40 16 61 27L58 33Q40 24 22 33Z" fill={colors[1]} />
+      )}
+      <path d="M31 42h1m16 0h1" stroke="#493c43" strokeLinecap="round" strokeWidth="3" />
+      <path d="M35 51q5 4 10 0" fill="none" stroke="#9e5755" strokeLinecap="round" strokeWidth="2" />
+      {hasMustache && (
+        <path d="M34 47q3-3 6 0 3-3 6 0-1 5-6 3-5 2-6-3Z" fill={colors[2]} />
+      )}
+      {hasGlasses && (
+        <g fill="none" stroke="#35434b" strokeWidth="2">
+          <rect x="26" y="37" width="12" height="9" rx="4" />
+          <rect x="42" y="37" width="12" height="9" rx="4" />
+          <path d="M38 40h4M26 40l-3-1m31 1 3-1" />
+        </g>
+      )}
+      {hasEarrings && (
+        <g fill="#f7d36b">
+          <circle cx="18" cy="51" r="2" />
+          <circle cx="62" cy="51" r="2" />
+        </g>
+      )}
     </svg>
   );
 }
@@ -1018,7 +1084,12 @@ export default function App() {
                   maxLength={40}
                   required
                   value={firstName}
-                  onChange={(event) => setFirstName(event.target.value)}
+                  onChange={(event) => {
+                    const name = event.target.value;
+                    setFirstName(name);
+                    const suggestedAvatar = feminineAvatarForName(name);
+                    if (suggestedAvatar !== null) setAvatarId(suggestedAvatar);
+                  }}
                   placeholder="Adın"
                 />
               </label>
