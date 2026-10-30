@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Room, RoomEvent, Track, type Participant } from "livekit-client";
+import headphonesLogo from "../headphones.svg";
 
 type RoomTokenResponse = {
   token: string;
@@ -485,7 +486,7 @@ export default function App() {
     <main className={`app-shell ${connected ? "room-shell" : ""}`}>
       <header className="topbar">
         <a className="brand" href="/" aria-label="Sesver ana sayfa">
-          <span className="brand-mark">S</span>
+          <img className="brand-mark" src={headphonesLogo} alt="" />
           <span>Sesver</span>
         </a>
         <span className="topbar-note">Hesap yok, davet bağlantısı yeterli.</span>
