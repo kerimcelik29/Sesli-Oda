@@ -194,6 +194,61 @@ function MediaTrack({ track, video }: { track: Track; video: boolean }) {
   );
 }
 
+function ScreenShareTile({
+  track,
+  own,
+  onError
+}: {
+  track: Track;
+  own: boolean;
+  onError: (message: string) => void;
+}) {
+  const tileRef = useRef<HTMLDivElement>(null);
+  const [fullscreen, setFullscreen] = useState(false);
+
+  useEffect(() => {
+    const updateFullscreen = () => {
+      setFullscreen(document.fullscreenElement === tileRef.current);
+    };
+    document.addEventListener("fullscreenchange", updateFullscreen);
+    return () => document.removeEventListener("fullscreenchange", updateFullscreen);
+  }, []);
+
+  async function toggleFullscreen() {
+    const tile = tileRef.current;
+    if (!tile) return;
+    try {
+      if (document.fullscreenElement === tile) {
+        await document.exitFullscreen();
+      } else {
+        await tile.requestFullscreen();
+      }
+    } catch (fullscreenError) {
+      onError(
+        fullscreenError instanceof Error
+          ? fullscreenError.message
+          : "Tam ekran açılamadı."
+      );
+    }
+  }
+
+  return (
+    <div className="screen-tile" ref={tileRef}>
+      <MediaTrack track={track} video />
+      <span>{own ? "Sen" : "Bir katılımcı"} ekran paylaşıyor</span>
+      <button
+        className="screen-fullscreen-button"
+        type="button"
+        onClick={() => void toggleFullscreen()}
+        aria-label={fullscreen ? "Tam ekrandan çık" : "Tam ekran yap"}
+        title={fullscreen ? "Tam ekrandan çık" : "Tam ekran yap"}
+      >
+        {fullscreen ? "×" : "⛶"}
+      </button>
+    </div>
+  );
+}
+
 export default function App() {
   const [room] = useState(() => new Room({ adaptiveStream: true, dynacast: true }));
   const [roomId, setRoomId] = useState(
@@ -607,10 +662,12 @@ export default function App() {
             <div className="stage">
               {screenTracks.length ? (
                 screenTracks.map(({ identity, track }) => (
-                  <div className="screen-tile" key={`${identity}-${track.sid}`}>
-                    <MediaTrack track={track} video />
-                    <span>{room.localParticipant.identity === identity ? "Sen" : "Bir katılımcı"} ekran paylaşıyor</span>
-                  </div>
+                  <ScreenShareTile
+                    key={`${identity}-${track.sid}`}
+                    track={track}
+                    own={room.localParticipant.identity === identity}
+                    onError={setError}
+                  />
                 ))
               ) : (
                 <div className="empty-stage">
