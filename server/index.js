@@ -12,6 +12,7 @@ const {
   APP_ORIGIN = "http://localhost:5173",
   LIVEKIT_API_URL = "http://localhost:7880",
   LIVEKIT_WS_URL = "ws://localhost:7880",
+  ROOM_CREATE_PASSWORD = "krm",
   LIVEKIT_API_KEY,
   LIVEKIT_API_SECRET
 } = process.env;
@@ -68,7 +69,15 @@ app.use(
   })
 );
 
-app.post("/api/rooms", async (_request, response, next) => {
+app.post("/api/rooms", async (request, response, next) => {
+  const password = typeof request.body?.password === "string"
+    ? request.body.password
+    : "";
+  if (password !== ROOM_CREATE_PASSWORD) {
+    response.status(403).json({ error: "Oda oluşturma şifresi hatalı." });
+    return;
+  }
+
   const roomId = randomUUID();
   const roomName = capitalNames[randomInt(capitalNames.length)];
 

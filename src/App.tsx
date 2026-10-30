@@ -259,6 +259,9 @@ export default function App() {
   const [savedProfile, setSavedProfile] = useState<SavedProfile | null>(loadSavedProfile);
   const [inviteUrl, setInviteUrl] = useState("");
   const [entryAction, setEntryAction] = useState<EntryAction | null>(null);
+  const [createPasswordOpen, setCreatePasswordOpen] = useState(false);
+  const [createPassword, setCreatePassword] = useState("");
+  const [pendingCreatePassword, setPendingCreatePassword] = useState("");
   const [firstName, setFirstName] = useState(() => loadSavedProfile()?.firstName ?? "");
   const [lastName, setLastName] = useState(() => loadSavedProfile()?.lastName ?? "");
   const [avatarId, setAvatarId] = useState(
@@ -274,6 +277,62 @@ export default function App() {
   const [toast, setToast] = useState("");
   const [revision, setRevision] = useState(0);
   const [speakingIdentities, setSpeakingIdentities] = useState<Set<string>>(() => new Set());
+  const notificationAudioRef = useRef<AudioContext | null>(null);
+
+  useEffect(() => () => {
+    void notificationAudioRef.current?.close();
+    notificationAudioRef.current = null;
+  }, []);
+
+  function unlockChatNotifications() {
+    try {
+      const context = notificationAudioRef.current;
+      if (!context || context.state === "closed") {
+        notificationAudioRef.current = new AudioContext();
+      }
+      const activeContext = notificationAudioRef.current;
+      if (activeContext?.state === "suspended") {
+        void activeContext.resume().catch((audioError: unknown) => {
+          setError(audioError instanceof Error ? audioError.message : "Sesli bildirim açılamadı.");
+        });
+      }
+    } catch (audioError) {
+      setError(audioError instanceof Error ? audioError.message : "Sesli bildirim açılamadı.");
+    }
+  }
+
+  function playChatNotification() {
+    const context = notificationAudioRef.current;
+    if (!context || context.state === "closed") return;
+
+    const playTone = () => {
+      const oscillator = context.createOscillator();
+      const gain = context.createGain();
+      const startAt = context.currentTime;
+      oscillator.type = "sine";
+      oscillator.frequency.setValueAtTime(740, startAt);
+      oscillator.frequency.setValueAtTime(880, startAt + 0.09);
+      gain.gain.setValueAtTime(0.0001, startAt);
+      gain.gain.exponentialRampToValueAtTime(0.08, startAt + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, startAt + 0.2);
+      oscillator.connect(gain);
+      gain.connect(context.destination);
+      oscillator.start(startAt);
+      oscillator.stop(startAt + 0.21);
+    };
+
+    if (context.state === "suspended") {
+      void context.resume().then(playTone).catch((audioError: unknown) => {
+        setError(audioError instanceof Error ? audioError.message : "Sohbet bildirimi çalınamadı.");
+      });
+      return;
+    }
+    try {
+      playTone();
+    } catch (audioError) {
+      setError(audioError instanceof Error ? audioError.message : "Sohbet bildirimi çalınamadı.");
+    }
+  }
 
   useEffect(() => {
     const refresh = () => setRevision((value) => value + 1);
@@ -315,6 +374,9 @@ export default function App() {
             text.trim().length > 0 &&
             text.length <= maxChatMessageLength
           ) {
+            if (participant.identity !== room.localParticipant.identity) {
+              playChatNotification();
+            }
             setChatMessages((current) => [
               ...current.slice(-(maxChatMessages - 1)),
               {
@@ -396,6 +458,12 @@ export default function App() {
 
   function startEntry(action: EntryAction) {
     setError("");
+    unlockChatNotifications();
+    if (action.type === "create") {
+      setCreatePassword("");
+      setCreatePasswordOpen(true);
+      return;
+    }
     if (savedProfile) {
       void enterRoom(action, savedProfile);
       return;
@@ -403,17 +471,48 @@ export default function App() {
     setEntryAction(action);
   }
 
+  function submitCreatePassword(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const password = createPassword;
+    setCreatePassword("");
+    setCreatePasswordOpen(false);
+    if (savedProfile) {
+      void enterRoom({ type: "create" }, savedProfile, password);
+      return;
+    }
+    setPendingCreatePassword(password);
+    setEntryAction({ type: "create" });
+  }
+
+  function cancelCreatePassword() {
+    setCreatePasswordOpen(false);
+    setCreatePassword("");
+  }
+
+  function cancelEntry() {
+    setEntryAction(null);
+    setPendingCreatePassword("");
+    setError("");
+  }
+
   function randomizeAvatar() {
     setAvatarId((current) => (current + 1 + Math.floor(Math.random() * (avatarColors.length - 1))) % avatarColors.length);
   }
 
-  async function enterRoom(action: EntryAction, profile: SavedProfile) {
+  async function enterRoom(
+    action: EntryAction,
+    profile: SavedProfile,
+    roomPassword?: string
+  ) {
     setBusy(true);
     setError("");
     try {
       let normalizedRoomId: string;
       if (action.type === "create") {
-        const invite = await apiRequest<InviteResponse>("/api/rooms", { method: "POST" });
+        const invite = await apiRequest<InviteResponse>("/api/rooms", {
+          method: "POST",
+          body: JSON.stringify({ password: roomPassword })
+        });
         normalizedRoomId = invite.roomId;
       } else {
         normalizedRoomId = roomIdFromInput(action.roomId ?? "");
@@ -452,6 +551,7 @@ export default function App() {
       window.history.replaceState(null, "", `?room=${encodeURIComponent(normalizedRoomId)}`);
       setConnected(true);
       setEntryAction(null);
+      setPendingCreatePassword("");
       try {
         await room.localParticipant.setMicrophoneEnabled(true);
         setMicrophoneEnabled(true);
@@ -468,7 +568,11 @@ export default function App() {
   function submitEntry(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!entryAction) return;
-    void enterRoom(entryAction, { firstName, lastName, avatarId });
+    void enterRoom(
+      entryAction,
+      { firstName, lastName, avatarId },
+      entryAction.type === "create" ? pendingCreatePassword : undefined
+    );
   }
 
   async function sendChatMessage(event: React.FormEvent<HTMLFormElement>) {
@@ -837,8 +941,45 @@ export default function App() {
           </footer>
         </section>
       )}
+      {createPasswordOpen && !connected && (
+        <div className="entry-backdrop" onMouseDown={cancelCreatePassword}>
+          <form
+            className="entry-dialog"
+            aria-labelledby="create-password-title"
+            onSubmit={submitCreatePassword}
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            <button
+              className="entry-close"
+              type="button"
+              aria-label="Pencereyi kapat"
+              onClick={cancelCreatePassword}
+            >
+              ×
+            </button>
+            <span className="entry-kicker">ODA OLUŞTURMA</span>
+            <h2 id="create-password-title">Şifreyi gir</h2>
+            <p className="entry-description">Yeni oda açmak için oda oluşturma şifresini gir.</p>
+            <label className="password-field">
+              Oda oluşturma şifresi
+              <input
+                autoFocus
+                autoComplete="current-password"
+                required
+                type="password"
+                value={createPassword}
+                onChange={(event) => setCreatePassword(event.target.value)}
+                placeholder="Şifre"
+              />
+            </label>
+            <button className="button button-primary entry-submit" type="submit">
+              Devam et
+            </button>
+          </form>
+        </div>
+      )}
       {entryAction && !connected && (
-        <div className="entry-backdrop" onMouseDown={() => !busy && setEntryAction(null)}>
+        <div className="entry-backdrop" onMouseDown={() => !busy && cancelEntry()}>
           <form
             className="entry-dialog"
             aria-labelledby="entry-title"
@@ -849,7 +990,7 @@ export default function App() {
               className="entry-close"
               type="button"
               aria-label="Pencereyi kapat"
-              onClick={() => setEntryAction(null)}
+              onClick={cancelEntry}
               disabled={busy}
             >
               ×
@@ -857,6 +998,7 @@ export default function App() {
             <span className="entry-kicker">SESEGEL’E HOŞ GELDİN</span>
             <h2 id="entry-title">Seni nasıl tanıyalım?</h2>
             <p className="entry-description">Katılımcıların seni tanıması için adını ve soyadını yaz.</p>
+            {error && <p className="entry-error" role="alert">{error}</p>}
             <div className="entry-avatar-row">
               <Avatar variant={avatarId} className="entry-avatar" />
               <div>

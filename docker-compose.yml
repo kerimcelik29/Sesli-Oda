@@ -11,6 +11,7 @@ services:
       APP_ORIGIN: ${APP_ORIGIN:-https://sesver.online}
       LIVEKIT_API_URL: ${LIVEKIT_API_URL:-http://host.docker.internal:7880}
       LIVEKIT_WS_URL: ${LIVEKIT_WS_URL:?Set LIVEKIT_WS_URL to the existing LiveKit public WebSocket URL}
+      ROOM_CREATE_PASSWORD: ${ROOM_CREATE_PASSWORD:-krm}
       LIVEKIT_API_KEY: ${LIVEKIT_API_KEY:?Set LIVEKIT_API_KEY for the existing LiveKit server}
       LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET:?Set LIVEKIT_API_SECRET for the existing LiveKit server}
     ports:

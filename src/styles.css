@@ -220,6 +220,21 @@ h1, h2, p { margin-top: 0; }
   line-height: 1.65;
 }
 
+.password-field { display: grid; gap: 7px; color: #bdccca; font-size: 11px; font-weight: 600; }
+.password-field input {
+  width: 100%;
+  height: 45px;
+  padding: 0 12px;
+  outline: none;
+  border: 1px solid #ffffff16;
+  border-radius: 11px;
+  color: #f3f8f7;
+  background: #101a1e;
+  font-size: 13px;
+}
+.password-field input:focus { border-color: #4acbb3; box-shadow: 0 0 0 3px #4acbb315; }
+.entry-error { margin: 0 0 12px; color: #fca5a5; font-size: 12px; line-height: 1.5; }
+
 .entry-avatar-row {
   display: flex;
   align-items: center;
