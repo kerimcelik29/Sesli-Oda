@@ -169,6 +169,29 @@ function roomIdFromInput(value: string) {
   }
 }
 
+function youtubeVideoIdFromInput(value: string): string | null {
+  try {
+    const url = new URL(value.trim());
+    const hostname = url.hostname.toLowerCase().replace(/^www\./, "");
+    let videoId: string | null = null;
+
+    if (hostname === "youtu.be") {
+      videoId = url.pathname.split("/").filter(Boolean)[0] ?? null;
+    } else if (hostname === "youtube.com" || hostname === "m.youtube.com") {
+      if (url.pathname === "/watch") {
+        videoId = url.searchParams.get("v");
+      } else {
+        const match = url.pathname.match(/^\/(?:embed|shorts)\/([^/]+)/);
+        videoId = match?.[1] ?? null;
+      }
+    }
+
+    return videoId && /^[a-zA-Z0-9_-]{11}$/.test(videoId) ? videoId : null;
+  } catch {
+    return null;
+  }
+}
+
 async function apiRequest<T>(path: string, options?: RequestInit): Promise<T> {
   const response = await fetch(`${apiBaseUrl}${path}`, {
     ...options,
@@ -335,6 +358,10 @@ export default function App() {
   );
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [chatDraft, setChatDraft] = useState("");
+  const [musicOpen, setMusicOpen] = useState(false);
+  const [youtubeInput, setYoutubeInput] = useState("");
+  const [youtubeVideoId, setYoutubeVideoId] = useState("");
+  const [youtubeError, setYoutubeError] = useState("");
   const [connected, setConnected] = useState(false);
   const [microphoneEnabled, setMicrophoneEnabled] = useState(false);
   const [screenSharing, setScreenSharing] = useState(false);
@@ -704,7 +731,21 @@ export default function App() {
     setInviteUrl("");
     setChatMessages([]);
     setChatDraft("");
+    setMusicOpen(false);
+    setYoutubeVideoId("");
+    setYoutubeInput("");
     window.history.replaceState(null, "", window.location.pathname);
+  }
+
+  function playYoutubeMusic(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const videoId = youtubeVideoIdFromInput(youtubeInput);
+    if (!videoId) {
+      setYoutubeError("Geçerli bir YouTube video bağlantısı gir.");
+      return;
+    }
+    setYoutubeError("");
+    setYoutubeVideoId(videoId);
   }
 
   return (
@@ -1001,9 +1042,63 @@ export default function App() {
               <span className="control-icon">▣</span>
               <span className="control-label">{screenSharing ? "Paylaşımı durdur" : "Ekran paylaş"}</span>
             </button>
+            <button
+              className={`control-button ${musicOpen || youtubeVideoId ? "control-active" : ""}`}
+              onClick={() => setMusicOpen((open) => !open)}
+              aria-expanded={musicOpen}
+              aria-controls="room-music-panel"
+            >
+              <span className="control-icon" aria-hidden="true">♫</span>
+              <span className="control-label">Müzik çal</span>
+            </button>
             <button className="button button-leave" onClick={() => void leaveRoom()}>
               <span aria-hidden="true">↗</span><span className="control-label">Odadan ayrıl</span>
             </button>
+            {musicOpen && (
+              <section className="room-music-panel" id="room-music-panel" aria-label="Kişisel YouTube müzik oynatıcı">
+                <div className="room-music-heading">
+                  <div>
+                    <span className="panel-eyebrow">KİŞİSEL OYNATMA</span>
+                    <h2>YouTube müzik</h2>
+                  </div>
+                  <button
+                    className="room-music-close"
+                    type="button"
+                    onClick={() => setMusicOpen(false)}
+                    aria-label="Müzik panelini kapat"
+                  >
+                    ×
+                  </button>
+                </div>
+                <p className="room-music-note">Bu müzik yalnızca senin cihazında çalar.</p>
+                <form className="room-music-form" onSubmit={playYoutubeMusic}>
+                  <input
+                    aria-label="YouTube video bağlantısı"
+                    autoComplete="url"
+                    value={youtubeInput}
+                    onChange={(event) => {
+                      setYoutubeInput(event.target.value);
+                      setYoutubeError("");
+                    }}
+                    placeholder="YouTube bağlantısını yapıştır"
+                  />
+                  <button className="button button-primary" type="submit">
+                    Çal
+                  </button>
+                </form>
+                {youtubeError && <p className="room-music-error" role="alert">{youtubeError}</p>}
+                {youtubeVideoId && (
+                  <iframe
+                    className="room-music-player"
+                    src={`https://www.youtube-nocookie.com/embed/${youtubeVideoId}?autoplay=1&rel=0`}
+                    title="YouTube müzik oynatıcı"
+                    allow="autoplay; encrypted-media; picture-in-picture"
+                    referrerPolicy="strict-origin-when-cross-origin"
+                    allowFullScreen
+                  />
+                )}
+              </section>
+            )}
           </footer>
         </section>
       )}

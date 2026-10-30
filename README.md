@@ -25,6 +25,7 @@ Oda oluştururken veya davetle katılırken ad ve soyad istenir. Her katılımc�
 Ana ekranda son ziyaret edilen en fazla altı oda, başkent adı ve katılım bağlantısıyla birlikte tarayıcının yerel depolamasında tutulur.
 Ad, soyad ve avatar da aynı cihazdaki tarayıcıda hatırlanır; sonraki girişlerde yeniden sorulmaz. Oda sohbeti LiveKit veri kanalı üzerinden gerçek zamanlı iletilir ve mesajlar odadan ayrılınca silinir.
 Yeni gelen sohbet mesajları kısa bir sesli bildirim çalar. Yeni oda oluştururken `ROOM_CREATE_PASSWORD` istenir. Varsayılan şifre `krm`'dir; sunucuda `.env` içinde `ROOM_CREATE_PASSWORD` ile değiştirilebilir. API şifreyi ayrıca doğrular; davet bağlantısıyla mevcut odaya katılmak için bu şifre gerekmez.
+Oda içindeki **Müzik çal** düğmesi YouTube bağlantısını kullanarak kişisel gömülü oynatıcı açar; her katılımcı kendi müziğini bağımsız olarak başlatıp durdurur. YouTube oynatma ve içerik kısıtlamaları geçerlidir.
 
 `LIVEKIT_API_URL`, sunucudaki mevcut LiveKit API'sine API konteynerinden erişilen adres; `LIVEKIT_WS_URL` ise kullanıcıların tarayıcılarından erişebileceği WebSocket (`wss://...`) adresidir. LiveKit API anahtarı ve gizli anahtarı mevcut LiveKit yapılandırmasıyla eşleşmelidir. Bunları Git'e eklemeyin veya GitHub Actions secret'larına koymayın. `API_HOST_PORT` yalnızca loopback arayüzüne bağlanır; canlı web API istekleri nginx üzerinden API konteynerine aktarılır.
 
