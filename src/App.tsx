@@ -694,64 +694,64 @@ export default function App() {
                   );
                 })}
               </div>
-              <section className="chat-panel" aria-label="Oda sohbeti">
-                <div className="chat-heading">
-                  <div>
-                    <span className="panel-eyebrow">YAZILI SOHBET</span>
-                    <h2>Sohbet</h2>
-                  </div>
-                  <span className="chat-message-count">{chatMessages.length}</span>
-                </div>
-                <div className="chat-messages" aria-live="polite">
-                  {chatMessages.length === 0 ? (
-                    <p className="chat-empty">Henüz mesaj yok. İlk mesajı sen gönder.</p>
-                  ) : (
-                    chatMessages.map((message) => (
-                      <article
-                        className={`chat-message ${message.senderIdentity === room.localParticipant.identity ? "chat-message-own" : ""}`}
-                        key={message.id}
-                      >
-                        <div className="chat-message-meta">
-                          <strong>{message.senderName}</strong>
-                          <time>{new Date(message.timestamp).toLocaleTimeString("tr-TR", {
-                            hour: "2-digit",
-                            minute: "2-digit"
-                          })}</time>
-                        </div>
-                        <p>{message.text}</p>
-                      </article>
-                    ))
-                  )}
-                  <div ref={latestChatMessageRef} />
-                </div>
-                <form className="chat-form" onSubmit={sendChatMessage}>
-                  <input
-                    aria-label="Sohbet mesajı"
-                    maxLength={maxChatMessageLength}
-                    value={chatDraft}
-                    onChange={(event) => setChatDraft(event.target.value)}
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter" && !event.shiftKey) {
-                        event.preventDefault();
-                        event.currentTarget.form?.requestSubmit();
-                      }
-                    }}
-                    placeholder="Mesaj yaz..."
-                  />
-                  <button
-                    type="submit"
-                    aria-label="Mesajı gönder"
-                    disabled={!chatDraft.trim()}
-                  >
-                    ↑
-                  </button>
-                </form>
-              </section>
               <div className="privacy-note">
                 <span aria-hidden="true">✦</span>
                 <p>Bu oda davet bağlantısıyla katılıma açıktır.</p>
               </div>
             </aside>
+            <section className="chat-panel" aria-label="Oda sohbeti">
+              <div className="chat-heading">
+                <div>
+                  <span className="panel-eyebrow">YAZILI SOHBET</span>
+                  <h2>Sohbet</h2>
+                </div>
+                <span className="chat-message-count">{chatMessages.length}</span>
+              </div>
+              <div className="chat-messages" aria-live="polite">
+                {chatMessages.length === 0 ? (
+                  <p className="chat-empty">Henüz mesaj yok. İlk mesajı sen gönder.</p>
+                ) : (
+                  chatMessages.map((message) => (
+                    <article
+                      className={`chat-message ${message.senderIdentity === room.localParticipant.identity ? "chat-message-own" : ""}`}
+                      key={message.id}
+                    >
+                      <div className="chat-message-meta">
+                        <strong>{message.senderName}</strong>
+                        <time>{new Date(message.timestamp).toLocaleTimeString("tr-TR", {
+                          hour: "2-digit",
+                          minute: "2-digit"
+                        })}</time>
+                      </div>
+                      <p>{message.text}</p>
+                    </article>
+                  ))
+                )}
+                <div ref={latestChatMessageRef} />
+              </div>
+              <form className="chat-form" onSubmit={sendChatMessage}>
+                <input
+                  aria-label="Sohbet mesajı"
+                  maxLength={maxChatMessageLength}
+                  value={chatDraft}
+                  onChange={(event) => setChatDraft(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" && !event.shiftKey) {
+                      event.preventDefault();
+                      event.currentTarget.form?.requestSubmit();
+                    }
+                  }}
+                  placeholder="Mesaj yaz..."
+                />
+                <button
+                  type="submit"
+                  aria-label="Mesajı gönder"
+                  disabled={!chatDraft.trim()}
+                >
+                  ↑
+                </button>
+              </form>
+            </section>
           </div>
           <footer className="controls">
             <div className="audio-tracks" aria-hidden="true">
