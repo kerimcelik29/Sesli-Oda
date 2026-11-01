@@ -102,7 +102,7 @@ const legacyRecentRoomsKey = "sesegel.recentRooms";
 const savedProfileKey = "sesver.profile";
 const chatTopic = "sesver-chat";
 const roomControlTopic = "sesver-room-control";
-const popularMusicPlaylistId = "PL4fGSI1pDJn6puJdseH2Rt9sMvt9E2M4i";
+const popularMusicPlaylistId = "PL4fGSI1pDJn5tdVDtIAZArERm_vv4uFCR";
 const maxChatMessages = 100;
 const maxChatMessageLength = 500;
 
@@ -1610,46 +1610,39 @@ export default function App() {
           </section>
         )}
         {musicPlayerOpen && connected && (
-          <div
-            className="music-player-backdrop"
-            onMouseDown={(event) => {
-              if (event.target === event.currentTarget) setMusicPlayerOpen(false);
-            }}
+          <section
+            className="music-player-popup"
+            role="dialog"
+            aria-modal="false"
+            aria-labelledby="music-player-title"
           >
-            <section
-              className="music-player-dialog"
-              role="dialog"
-              aria-modal="true"
-              aria-labelledby="music-player-title"
-            >
-              <header className="music-player-heading">
-                <div>
-                  <span className="panel-eyebrow">YOUTUBE OYNATICISI</span>
-                  <h2 id="music-player-title">Popüler müzik</h2>
-                </div>
-                <button
-                  type="button"
-                  className="music-player-close"
-                  onClick={() => setMusicPlayerOpen(false)}
-                  aria-label="Müzik oynatıcısını kapat"
-                >
-                  ×
-                </button>
-              </header>
-              <iframe
-                className="music-player-frame"
-                src={`https://www.youtube-nocookie.com/embed/videoseries?list=${popularMusicPlaylistId}&autoplay=1&controls=1&playsinline=1&rel=0`}
-                title="YouTube popüler müzik oynatıcısı"
-                allow="autoplay; encrypted-media; picture-in-picture; web-share"
-                referrerPolicy="strict-origin-when-cross-origin"
-                allowFullScreen
-              />
-              <p className="music-player-note">
-                Müzik bu cihazda çalar; diğer katılımcılar duymaz. Oynatmak için YouTube
-                oynatıcısındaki başlat düğmesine basın.
-              </p>
-            </section>
-          </div>
+            <header className="music-player-heading">
+              <div>
+                <span className="panel-eyebrow">TÜRKİYE · YOUTUBE TOP 100</span>
+                <h2 id="music-player-title">Haftanın popülerleri</h2>
+              </div>
+              <button
+                type="button"
+                className="music-player-close"
+                onClick={() => setMusicPlayerOpen(false)}
+                aria-label="Müzik oynatıcısını kapat"
+              >
+                ×
+              </button>
+            </header>
+            <iframe
+              className="music-player-frame"
+              src={`https://www.youtube-nocookie.com/embed/videoseries?list=${popularMusicPlaylistId}&autoplay=1&controls=1&playsinline=1&rel=0`}
+              title="YouTube Türkiye haftalık popüler şarkılar oynatıcısı"
+              allow="autoplay; encrypted-media; picture-in-picture; web-share"
+              referrerPolicy="strict-origin-when-cross-origin"
+              allowFullScreen
+            />
+            <p className="music-player-note">
+              Türkiye YouTube Charts haftalık sıralaması. Müzik yalnızca bu cihazda çalar;
+              diğer katılımcılar duymaz.
+            </p>
+          </section>
         )}
         {createPasswordOpen && !connected && (
         <div className="entry-backdrop" onMouseDown={cancelCreatePassword}>
