@@ -1,6 +1,6 @@
 {
   "name": "sesver",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "private": true,
   "type": "module",
   "main": "electron/main.cjs",
@@ -16,6 +16,7 @@
   "dependencies": {
     "cors": "^2.8.5",
     "dotenv": "^16.4.7",
+    "electron-updater": "^6.8.11",
     "express": "^4.21.2",
     "express-rate-limit": "^7.5.0",
     "helmet": "^8.0.0",
@@ -40,6 +41,11 @@
   "build": {
     "appId": "app.sesver.desktop",
     "productName": "Sesver",
+    "publish": {
+      "provider": "github",
+      "owner": "kerimcelik29",
+      "repo": "Sesli-Oda"
+    },
     "files": [
       "dist/**/*",
       "electron/**/*",
@@ -52,7 +58,7 @@
     },
     "mac": {
       "icon": "electron/icon.icns",
-      "target": "dmg",
+      "target": ["dmg", "zip"],
       "artifactName": "Sesver.${ext}",
       "extendInfo": {
         "NSCameraUsageDescription": "Sesver, oda katılımcılarıyla görüntülü görüşme için kameranızı kullanır.",

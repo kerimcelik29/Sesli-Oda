@@ -38,7 +38,10 @@ jobs:
           name: desktop-${{ matrix.os }}
           path: |
             dist/*.exe
+            dist/*.blockmap
             dist/*.dmg
+            dist/*.zip
+            dist/*.yml
           if-no-files-found: error
 
   publish:
