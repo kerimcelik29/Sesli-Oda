@@ -16,15 +16,9 @@ function createWindow() {
     }
   });
 
-  if (process.env.VITE_DEV_SERVER_URL) {
-    const url = new URL(process.env.VITE_DEV_SERVER_URL);
-    url.searchParams.set("platform", "desktop");
-    window.loadURL(url.toString());
-  } else {
-    window.loadFile(path.join(__dirname, "../dist/index.html"), {
-      query: { platform: "desktop" }
-    });
-  }
+  const url = new URL(process.env.VITE_DEV_SERVER_URL ?? "https://sesver.online/");
+  url.searchParams.set("platform", "desktop");
+  window.loadURL(url.toString());
 }
 
 app.whenReady().then(() => {

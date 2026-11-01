@@ -787,7 +787,11 @@ export default function App() {
     <div className={isDesktopApp ? "desktop-app" : undefined}>
       <main className={`app-shell ${connected ? "room-shell" : ""}`}>
         <header className="topbar">
-          <a className="brand" href="/" aria-label="Sesver ana sayfa">
+          <a
+            className="brand"
+            href={isDesktopApp ? "/?platform=desktop" : "/"}
+            aria-label="Sesver ana sayfa"
+          >
             <img className="brand-mark" src={headphonesLogo} alt="" />
             <span>Sesver</span>
           </a>
