@@ -787,7 +787,7 @@ export default function App() {
           <img className="brand-mark" src={headphonesLogo} alt="" />
           <span>Sesver</span>
         </a>
-        <span className="topbar-note">Hesap yok, davet bağlantısı yeterli.</span>
+        <span className="topbar-note"><span className="connection-dot" /> Görüşme alanı hazır</span>
       </header>
 
       {error && (
@@ -808,11 +808,10 @@ export default function App() {
       {!connected ? (
         <section className="welcome">
           <div className="welcome-copy">
-            <span className="eyebrow">BİRLİKTE OLMAK DAHA KOLAY</span>
-            <h1>Sesini duyur.<br />Ekranını paylaş.</h1>
+            <span className="eyebrow">ÇALIŞMA ALANI</span>
+            <h1>Bir odaya<br />katılın.</h1>
             <p>
-              Bir oda aç, bağlantıyı arkadaşlarınla paylaş ve sohbete başlayın.
-              Kayıt olmak gerekmez.
+              Yeni bir görüşme başlatın veya davet bağlantısıyla mevcut bir odaya katılın.
             </p>
             <div className="welcome-actions">
               <button
@@ -896,17 +895,31 @@ export default function App() {
               </div>
             )}
           </div>
-          <div className="welcome-art" aria-hidden="true">
+          <aside className="welcome-art" aria-label="Ses odası önizlemesi">
+            <div className="workspace-heading">
+              <div>
+                <span>ODA ÖNİZLEMESİ</span>
+                <strong>Sesli buluşma</strong>
+              </div>
+              <span className="workspace-status"><i /> Hazır</span>
+            </div>
             <div className="orbit orbit-one" />
             <div className="orbit orbit-two" />
             <div className="art-card">
-              <span className="avatar avatar-violet">A</span>
-              <span className="avatar avatar-blue">M</span>
-              <span className="avatar avatar-orange">E</span>
+              <div className="art-participants">
+                <div><span className="avatar avatar-violet">A</span><small>Ayşe</small></div>
+                <div><span className="avatar avatar-blue">M</span><small>Mert</small></div>
+                <div><span className="avatar avatar-orange">E</span><small>Elif</small></div>
+              </div>
               <span className="sound-wave"><i /><i /><i /><i /><i /><i /><i /></span>
-              <span className="art-caption">Sohbet başladı</span>
+              <span className="art-caption">Sesli oda</span>
             </div>
-          </div>
+            <div className="workspace-footer">
+              <span><i>●</i> Mikrofon</span>
+              <span><i>●</i> Kamera</span>
+              <span><i>●</i> Ekran paylaşımı</span>
+            </div>
+          </aside>
         </section>
       ) : (
         <section className="room-layout">

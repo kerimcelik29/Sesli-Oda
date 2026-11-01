@@ -46,10 +46,12 @@
       "package.json"
     ],
     "win": {
+      "icon": "electron/icon.ico",
       "target": "nsis",
       "artifactName": "Sesver-Setup.${ext}"
     },
     "mac": {
+      "icon": "electron/icon.icns",
       "target": "dmg",
       "artifactName": "Sesver.${ext}",
       "extendInfo": {

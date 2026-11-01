@@ -32,7 +32,7 @@ Oda içindeki **Popüler müzik** düğmesi YouTube'un güncel Türkiye haftalı
 
 ## Masaüstü paketleri
 
-`npm run desktop` mevcut işletim sistemi için paket üretir. Windows kurulum dosyası Windows'ta, macOS disk imajı ise macOS'ta oluşturulmalıdır. Ana depoda `v` ile başlayan bir Git etiketi yayımlandığında GitHub Actions her iki platform için kurulum dosyasını oluşturup GitHub Release'e ekler. Giriş ekranındaki indirme bağlantıları bu son sürüme gider.
+`npm run desktop` mevcut işletim sistemi için paket üretir. Windows kurulum dosyası Windows'ta, macOS disk imajı ise macOS'ta oluşturulmalıdır. Masaüstü uygulamasının Windows ve macOS simgeleri, web sitesindeki kulaklık logosuyla aynıdır. Ana depoda `v` ile başlayan bir Git etiketi yayımlandığında GitHub Actions her iki platform için kurulum dosyasını oluşturup GitHub Release'e ekler. Giriş ekranındaki indirme bağlantıları bu son sürüme gider.
 
 Odalar boş kaldıktan 10 dakika sonra kapanır. Sunucu her odayı 20 katılımcıyla sınırlar. Katılım belirteci oda özelinde ve bir saat geçerlidir.
 
