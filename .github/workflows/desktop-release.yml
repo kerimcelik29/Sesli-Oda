@@ -30,7 +30,7 @@ jobs:
         run: npm ci
 
       - name: Build desktop installer
-        run: npm run desktop
+        run: npm run build && npx electron-builder --publish never
 
       - name: Upload installer
         uses: actions/upload-artifact@v4

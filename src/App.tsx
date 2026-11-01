@@ -754,10 +754,25 @@ export default function App() {
   async function toggleCamera() {
     try {
       const enabled = !cameraEnabled;
+      if (enabled) {
+        if (!navigator.mediaDevices?.enumerateDevices) {
+          setError("Tarayıcı kameraya erişemiyor. Güvenli bağlantı veya kamera iznini kontrol edin.");
+          return;
+        }
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        if (!devices.some((device) => device.kind === "videoinput")) {
+          setError("Bu cihazda kullanılabilir bir kamera bulunamadı.");
+          return;
+        }
+      }
       await room.localParticipant.setCameraEnabled(enabled);
       setCameraEnabled(enabled);
     } catch (mediaError) {
-      setError(mediaError instanceof Error ? mediaError.message : "Kamera açılamadı.");
+      setError(
+        mediaError instanceof Error
+          ? `Kamera açılamadı: ${mediaError.message}`
+          : "Kamera açılamadı. Cihazınızı ve kamera iznini kontrol edin."
+      );
     }
   }
 
@@ -1152,8 +1167,8 @@ export default function App() {
               <section className="room-music-panel" id="room-music-panel" aria-label="Kişisel YouTube müzik oynatıcı">
                 <div className="room-music-heading">
                   <div>
-                    <span className="panel-eyebrow">KİŞİSEL OYNATMA</span>
-                    <h2>YouTube müzik</h2>
+                    <span className="panel-eyebrow">GÜNCEL LİSTE</span>
+                    <h2>Popüler müzik</h2>
                   </div>
                   <button
                     className="room-music-close"
@@ -1164,30 +1179,35 @@ export default function App() {
                     ×
                   </button>
                 </div>
-                <p className="room-music-note">Bu müzik yalnızca senin cihazında çalar.</p>
-                <form className="room-music-form" onSubmit={playYoutubeMusic}>
-                  <input
-                    aria-label="YouTube video bağlantısı"
-                    autoComplete="url"
-                    value={youtubeInput}
-                    onChange={(event) => {
-                      setYoutubeInput(event.target.value);
-                      setYoutubeError("");
-                    }}
-                    placeholder="YouTube bağlantısını yapıştır"
-                  />
-                  <button className="button button-primary" type="submit">
-                    Çal
-                  </button>
-                </form>
+                <p className="room-music-note">
+                  Güncel Türkiye şarkı listesi YouTube’da açılır. Oynatmak istediğin şarkıya dokun.
+                </p>
                 <a
-                  className="music-discover-link"
-                  href="https://www.youtube.com/results?search_query=T%C3%BCrkiye+pop%C3%BCler+m%C3%BCzik+en+%C3%A7ok+dinlenen"
+                  className="music-chart-link"
+                  href="https://charts.youtube.com/charts/TopSongs/tr/weekly"
                   target="_blank"
                   rel="noreferrer"
                 >
-                  YouTube’da popüler şarkıları keşfet <span aria-hidden="true">↗</span>
+                  ♫ Türkiye’de popüler şarkıları aç <span aria-hidden="true">↗</span>
                 </a>
+                <details className="music-manual">
+                  <summary>YouTube bağlantısıyla çal</summary>
+                  <form className="room-music-form" onSubmit={playYoutubeMusic}>
+                    <input
+                      aria-label="YouTube video bağlantısı"
+                      autoComplete="url"
+                      value={youtubeInput}
+                      onChange={(event) => {
+                        setYoutubeInput(event.target.value);
+                        setYoutubeError("");
+                      }}
+                      placeholder="YouTube video bağlantısı"
+                    />
+                    <button className="button button-primary" type="submit">
+                      Çal
+                    </button>
+                  </form>
+                </details>
                 {youtubeError && <p className="room-music-error" role="alert">{youtubeError}</p>}
                 {youtubeVideoId && (
                   <iframe
