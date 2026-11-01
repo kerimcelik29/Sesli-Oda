@@ -12,8 +12,11 @@ services:
       LIVEKIT_API_URL: ${LIVEKIT_API_URL:-http://host.docker.internal:7880}
       LIVEKIT_WS_URL: ${LIVEKIT_WS_URL:?Set LIVEKIT_WS_URL to the existing LiveKit public WebSocket URL}
       ROOM_CREATE_PASSWORD: ${ROOM_CREATE_PASSWORD:-krm}
+      ROOMS_FILE: /data/rooms.json
       LIVEKIT_API_KEY: ${LIVEKIT_API_KEY:?Set LIVEKIT_API_KEY for the existing LiveKit server}
       LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET:?Set LIVEKIT_API_SECRET for the existing LiveKit server}
+    volumes:
+      - sesver-room-registry:/data
     ports:
       - "127.0.0.1:${API_HOST_PORT:-13001}:3001"
     extra_hosts:
@@ -29,3 +32,6 @@ services:
     depends_on:
       - api
     restart: unless-stopped
+
+volumes:
+  sesver-room-registry:

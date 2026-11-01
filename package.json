@@ -46,10 +46,16 @@
       "package.json"
     ],
     "win": {
-      "target": "nsis"
+      "target": "nsis",
+      "artifactName": "Sesver-Setup.${ext}"
     },
     "mac": {
-      "target": "dmg"
+      "target": "dmg",
+      "artifactName": "Sesver.${ext}",
+      "extendInfo": {
+        "NSCameraUsageDescription": "Sesver, oda katılımcılarıyla görüntülü görüşme için kameranızı kullanır.",
+        "NSMicrophoneUsageDescription": "Sesver, oda katılımcılarıyla görüşme için mikrofonunuzu kullanır."
+      }
     }
   }
 }

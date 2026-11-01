@@ -263,7 +263,15 @@ function Avatar({ variant, className = "" }: { variant: number; className?: stri
   );
 }
 
-function MediaTrack({ track, video }: { track: Track; video: boolean }) {
+function MediaTrack({
+  track,
+  video,
+  className
+}: {
+  track: Track;
+  video: boolean;
+  className?: string;
+}) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
 
@@ -277,9 +285,18 @@ function MediaTrack({ track, video }: { track: Track; video: boolean }) {
   }, [track, video]);
 
   return video ? (
-    <video className="shared-screen" ref={videoRef} autoPlay playsInline />
+    <video className={className ?? "shared-screen"} ref={videoRef} autoPlay playsInline />
   ) : (
     <audio ref={audioRef} autoPlay />
+  );
+}
+
+function CameraTile({ track, name }: { track: Track; name: string }) {
+  return (
+    <div className="camera-tile">
+      <MediaTrack track={track} video className="camera-video" />
+      <span>{name}</span>
+    </div>
   );
 }
 
@@ -364,6 +381,7 @@ export default function App() {
   const [youtubeError, setYoutubeError] = useState("");
   const [connected, setConnected] = useState(false);
   const [microphoneEnabled, setMicrophoneEnabled] = useState(false);
+  const [cameraEnabled, setCameraEnabled] = useState(false);
   const [screenSharing, setScreenSharing] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -536,6 +554,35 @@ export default function App() {
     [room, revision]
   );
 
+  const cameraTracks = useMemo(
+    () => {
+      const localTracks = Array.from(room.localParticipant.trackPublications.values())
+        .filter(
+          (publication) =>
+            publication.source === Track.Source.Camera && publication.track
+        )
+        .map((publication) => ({
+          identity: room.localParticipant.identity,
+          name: room.localParticipant.name || "Katılımcı",
+          track: publication.track!
+        }));
+      const remoteTracks = Array.from(room.remoteParticipants.values()).flatMap((participant) =>
+        Array.from(participant.trackPublications.values())
+          .filter(
+            (publication) =>
+              publication.source === Track.Source.Camera && publication.track
+          )
+          .map((publication) => ({
+            identity: participant.identity,
+            name: participant.name || "Katılımcı",
+            track: publication.track!
+          }))
+      );
+      return [...localTracks, ...remoteTracks];
+    },
+    [room, revision]
+  );
+
   const audioTracks = useMemo(
     () =>
       Array.from(room.remoteParticipants.values()).flatMap((participant) =>
@@ -704,6 +751,16 @@ export default function App() {
     }
   }
 
+  async function toggleCamera() {
+    try {
+      const enabled = !cameraEnabled;
+      await room.localParticipant.setCameraEnabled(enabled);
+      setCameraEnabled(enabled);
+    } catch (mediaError) {
+      setError(mediaError instanceof Error ? mediaError.message : "Kamera açılamadı.");
+    }
+  }
+
   async function toggleScreenShare() {
     try {
       const enabled = !screenSharing;
@@ -727,6 +784,7 @@ export default function App() {
     await room.disconnect();
     setConnected(false);
     setMicrophoneEnabled(false);
+    setCameraEnabled(false);
     setScreenSharing(false);
     setInviteUrl("");
     setChatMessages([]);
@@ -814,7 +872,29 @@ export default function App() {
             <div className="feature-list">
               <span>● Ücretsiz katılım</span>
               <span>● 20 kişiye kadar</span>
-              <span>● Ses ve ekran paylaşımı</span>
+              <span>● Ses, kamera ve ekran paylaşımı</span>
+            </div>
+            <div className="download-links" aria-label="Masaüstü uygulamasını indir">
+              <a
+                className="download-link"
+                href="https://github.com/kerimcelik29/Sesli-Oda/releases/latest/download/Sesver-Setup.exe"
+              >
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M3 4.2 10.4 3v8H3V4.2Zm8.6-1.4L21 1.5V11h-9.4V2.8ZM3 12.6h7.4v8L3 19.4v-6.8Zm8.6 0H21v9.5l-9.4-1.3v-8.2Z" fill="currentColor" />
+                </svg>
+                <span><strong>Windows için indir</strong><small>Windows 10 ve üzeri</small></span>
+                <span className="download-arrow" aria-hidden="true">↓</span>
+              </a>
+              <a
+                className="download-link"
+                href="https://github.com/kerimcelik29/Sesli-Oda/releases/latest/download/Sesver.dmg"
+              >
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M16.4 12.8c0-2 1.6-3 1.7-3.1a4 4 0 0 0-3.1-1.7c-1.3-.1-2.5.8-3.1.8s-1.6-.8-2.7-.8a4.1 4.1 0 0 0-3.4 2.1c-1.5 2.6-.4 6.5 1 8.6.7 1 1.4 2.1 2.5 2 1-.1 1.4-.7 2.7-.7s1.7.7 2.7.7 1.7-1 2.4-2a9 9 0 0 0 1.1-2.3 3.7 3.7 0 0 1-1.8-3.6ZM14.3 6.7a3.8 3.8 0 0 0 .9-2.8 3.9 3.9 0 0 0-2.6 1.3 3.6 3.6 0 0 0-.9 2.7 3.2 3.2 0 0 0 2.6-1.2Z" fill="currentColor" />
+                </svg>
+                <span><strong>macOS için indir</strong><small>macOS 12 ve üzeri</small></span>
+                <span className="download-arrow" aria-hidden="true">↓</span>
+              </a>
             </div>
             {recentRooms.length > 0 && (
               <div className="recent-rooms">
@@ -880,6 +960,12 @@ export default function App() {
                     onError={setError}
                   />
                 ))
+              ) : cameraTracks.length ? (
+                <div className="camera-grid">
+                  {cameraTracks.map(({ identity, name, track }) => (
+                    <CameraTile key={`${identity}-${track.sid}`} track={track} name={name} />
+                  ))}
+                </div>
               ) : (
                 <div className="empty-stage">
                   <div className="stage-visual">
@@ -1036,6 +1122,14 @@ export default function App() {
               <span className="control-label">{microphoneEnabled ? "Mikrofon" : "Mikrofon kapalı"}</span>
             </button>
             <button
+              className={`control-button ${cameraEnabled ? "control-active" : ""}`}
+              onClick={() => void toggleCamera()}
+              aria-pressed={cameraEnabled}
+            >
+              <span className="control-icon" aria-hidden="true">{cameraEnabled ? "◉" : "▣"}</span>
+              <span className="control-label">{cameraEnabled ? "Kamerayı kapat" : "Kamerayı aç"}</span>
+            </button>
+            <button
               className={`control-button ${screenSharing ? "control-active" : ""}`}
               onClick={() => void toggleScreenShare()}
             >
@@ -1086,6 +1180,14 @@ export default function App() {
                     Çal
                   </button>
                 </form>
+                <a
+                  className="music-discover-link"
+                  href="https://www.youtube.com/results?search_query=T%C3%BCrkiye+pop%C3%BCler+m%C3%BCzik+en+%C3%A7ok+dinlenen"
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  YouTube’da popüler şarkıları keşfet <span aria-hidden="true">↗</span>
+                </a>
                 {youtubeError && <p className="room-music-error" role="alert">{youtubeError}</p>}
                 {youtubeVideoId && (
                   <iframe

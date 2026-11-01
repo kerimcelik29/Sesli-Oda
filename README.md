@@ -17,21 +17,22 @@ Sesver, davet bağlantısıyla katılınan sesli sohbet ve ekran paylaşımı uy
 6. `http://localhost:5173` adresini açıp bir oda oluşturun.
 
 Docker Compose mevcut LiveKit sunucusuna bağlanır; LiveKit servisi oluşturmaz, başlatmaz veya durdurmaz.
+Üretimde Express, istekleri Caddy ve nginx proxy zincirinin arkasında alır ve bu iki proxy hop'una güvenir.
 
 Yeni odalara ülkelerin başkentlerinden rastgele bir isim verilir. Davet bağlantıları, odaları benzersiz tutmak için ayrı bir kimlik kullanır.
 
-Oda oluştururken veya davetle katılırken ad ve soyad istenir. Her katılımcıya rastgele bir avatar atanır; avatar oda içindeki diğer katılımcılara da gösterilir.
+Oda oluştururken veya davetle katılırken ad ve soyad istenir. Her katılımcıya rastgele bir avatar atanır; avatar oda içindeki diğer katılımcılara da gösterilir. Katılımcılar oda içinden kameralarını açabilir; kamera ve mikrofon izinleri tarayıcıdan istenir.
 
-Ana ekranda son ziyaret edilen en fazla altı oda, başkent adı ve katılım bağlantısıyla birlikte tarayıcının yerel depolamasında tutulur.
+Ana ekranda son ziyaret edilen en fazla altı oda, başkent adı ve katılım bağlantısıyla birlikte tarayıcının yerel depolamasında tutulur. Sunucu da oluşturulan odaların kimlik ve adlarını kalıcı Docker volume'ünde saklar. Oda boş kalıp LiveKit tarafından kapatılsa bile son odalardan veya davet bağlantısından yeniden katılındığında aynı kimlikle tekrar açılır; odaya katılmak için oluşturma şifresi gerekmez. Bu kayıt deploy sırasında korunur; `docker compose down -v` kalıcı volume'ü de sileceğinden kayıtlı odalar kaybolur.
 Ad, soyad ve avatar da aynı cihazdaki tarayıcıda hatırlanır; sonraki girişlerde yeniden sorulmaz. Oda sohbeti LiveKit veri kanalı üzerinden gerçek zamanlı iletilir ve mesajlar odadan ayrılınca silinir.
-Yeni gelen sohbet mesajları kısa bir sesli bildirim çalar. Yeni oda oluştururken `ROOM_CREATE_PASSWORD` istenir. Varsayılan şifre `krm`'dir; sunucuda `.env` içinde `ROOM_CREATE_PASSWORD` ile değiştirilebilir. API şifreyi ayrıca doğrular; davet bağlantısıyla mevcut odaya katılmak için bu şifre gerekmez.
-Oda içindeki **Müzik çal** düğmesi YouTube bağlantısını kullanarak kişisel gömülü oynatıcı açar; her katılımcı kendi müziğini bağımsız olarak başlatıp durdurur. YouTube oynatma ve içerik kısıtlamaları geçerlidir.
+Yeni gelen sohbet mesajları kısa bir sesli bildirim çalar. Yeni oda oluştururken `ROOM_CREATE_PASSWORD` istenir. Varsayılan şifre `krm`'dir; sunucuda `.env` içinde `ROOM_CREATE_PASSWORD` ile değiştirilebilir. API şifreyi ayrıca doğrular; kayıtlı bir odaya veya davet bağlantısıyla mevcut odaya katılmak için bu şifre gerekmez.
+Oda içindeki **Müzik çal** düğmesi YouTube bağlantısını kullanarak kişisel gömülü oynatıcı açar; her katılımcı kendi müziğini bağımsız olarak başlatıp durdurur. Popüler şarkıları keşfet bağlantısı YouTube aramasını açar; YouTube'un herkese açık, anahtarsız ve kararlı bir popüler müzik akışı bulunmadığından şarkı otomatik seçilip oynatılmaz. YouTube oynatma ve içerik kısıtlamaları geçerlidir.
 
 `LIVEKIT_API_URL`, sunucudaki mevcut LiveKit API'sine API konteynerinden erişilen adres; `LIVEKIT_WS_URL` ise kullanıcıların tarayıcılarından erişebileceği WebSocket (`wss://...`) adresidir. LiveKit API anahtarı ve gizli anahtarı mevcut LiveKit yapılandırmasıyla eşleşmelidir. Bunları Git'e eklemeyin veya GitHub Actions secret'larına koymayın. `API_HOST_PORT` yalnızca loopback arayüzüne bağlanır; canlı web API istekleri nginx üzerinden API konteynerine aktarılır.
 
 ## Masaüstü paketleri
 
-`npm run desktop` mevcut işletim sistemi için paket üretir. Windows kurulum dosyası Windows'ta, macOS disk imajı ise macOS'ta oluşturulmalıdır.
+`npm run desktop` mevcut işletim sistemi için paket üretir. Windows kurulum dosyası Windows'ta, macOS disk imajı ise macOS'ta oluşturulmalıdır. Ana depoda `v` ile başlayan bir Git etiketi yayımlandığında GitHub Actions her iki platform için kurulum dosyasını oluşturup GitHub Release'e ekler. Giriş ekranındaki indirme bağlantıları bu son sürüme gider.
 
 Odalar boş kaldıktan 10 dakika sonra kapanır. Sunucu her odayı 20 katılımcıyla sınırlar. Katılım belirteci oda özelinde ve bir saat geçerlidir.
 

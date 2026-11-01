@@ -4,6 +4,8 @@ import express from "express";
 import { rateLimit } from "express-rate-limit";
 import helmet from "helmet";
 import { randomInt, randomUUID } from "node:crypto";
+import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import path from "node:path";
 import { AccessToken, RoomServiceClient } from "livekit-server-sdk";
 
 const {
@@ -13,6 +15,7 @@ const {
   LIVEKIT_API_URL = "http://localhost:7880",
   LIVEKIT_WS_URL = "ws://localhost:7880",
   ROOM_CREATE_PASSWORD = "krm",
+  ROOMS_FILE = path.join(process.cwd(), "data", "rooms.json"),
   LIVEKIT_API_KEY,
   LIVEKIT_API_SECRET
 } = process.env;
@@ -22,6 +25,10 @@ if (!LIVEKIT_API_KEY || !LIVEKIT_API_SECRET) {
 }
 
 const maxParticipants = 20;
+const roomIdPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const roomRegistry = await loadRoomRegistry();
+const roomRestorations = new Map();
+let registryUpdateQueue = Promise.resolve();
 const capitalNames = [
   "Abu Dabi", "Abuja", "Addis Ababa", "Alger", "Amman", "Amsterdam", "Andorra la Vella",
   "Ankara", "Antananarivo", "Apia", "Astana", "Asuncion", "Atina", "Aşkabat", "Bağdat",
@@ -55,7 +62,86 @@ const roomService = new RoomServiceClient(
 );
 const app = express();
 
+async function loadRoomRegistry() {
+  let contents;
+  try {
+    contents = await readFile(ROOMS_FILE, "utf8");
+  } catch (error) {
+    if (error?.code === "ENOENT") return new Map();
+    throw error;
+  }
+
+  const savedRooms = JSON.parse(contents);
+  if (!savedRooms || typeof savedRooms !== "object" || Array.isArray(savedRooms)) {
+    throw new Error("The persistent room registry has an invalid format.");
+  }
+
+  const rooms = new Map();
+  for (const [roomId, roomName] of Object.entries(savedRooms)) {
+    if (
+      !roomIdPattern.test(roomId) ||
+      typeof roomName !== "string" ||
+      !roomName.trim() ||
+      roomName.length > 80
+    ) {
+      throw new Error("The persistent room registry contains an invalid room.");
+    }
+    rooms.set(roomId, roomName);
+  }
+  return rooms;
+}
+
+function rememberRoom(roomId, roomName) {
+  const update = registryUpdateQueue.then(async () => {
+    const previousName = roomRegistry.get(roomId);
+    roomRegistry.set(roomId, roomName);
+    try {
+      await mkdir(path.dirname(ROOMS_FILE), { recursive: true });
+      const temporaryFile = `${ROOMS_FILE}.${process.pid}.${randomUUID()}.tmp`;
+      await writeFile(temporaryFile, JSON.stringify(Object.fromEntries(roomRegistry)), {
+        encoding: "utf8",
+        mode: 0o600
+      });
+      await rename(temporaryFile, ROOMS_FILE);
+    } catch (error) {
+      if (previousName === undefined) roomRegistry.delete(roomId);
+      else roomRegistry.set(roomId, previousName);
+      throw error;
+    }
+  });
+  registryUpdateQueue = update.catch(() => {});
+  return update;
+}
+
+function createRoom(roomId, roomName) {
+  return roomService.createRoom({
+    name: roomId,
+    metadata: roomName,
+    maxParticipants,
+    emptyTimeout: 10 * 60,
+    departureTimeout: 10 * 60
+  });
+}
+
+async function findOrRestoreRoom(roomId) {
+  const [activeRoom] = await roomService.listRooms([roomId]);
+  if (activeRoom) return activeRoom;
+
+  const roomName = roomRegistry.get(roomId);
+  if (!roomName) return null;
+
+  let restoration = roomRestorations.get(roomId);
+  if (!restoration) {
+    restoration = createRoom(roomId, roomName).finally(() => {
+      roomRestorations.delete(roomId);
+    });
+    roomRestorations.set(roomId, restoration);
+  }
+  return restoration;
+}
+
 app.disable("x-powered-by");
+app.set("trust proxy", 2);
 app.use(helmet());
 app.use(cors({ origin: APP_ORIGIN }));
 app.use(express.json({ limit: "8kb" }));
@@ -82,12 +168,17 @@ app.post("/api/rooms", async (request, response, next) => {
   const roomName = capitalNames[randomInt(capitalNames.length)];
 
   try {
-    await roomService.createRoom({
-      name: roomId,
-      metadata: roomName,
-      maxParticipants,
-      emptyTimeout: 10 * 60
-    });
+    await createRoom(roomId, roomName);
+    try {
+      await rememberRoom(roomId, roomName);
+    } catch (registryError) {
+      try {
+        await roomService.deleteRoom(roomId);
+      } catch (cleanupError) {
+        console.error("Could not remove a room after saving its registry entry failed:", cleanupError);
+      }
+      throw registryError;
+    }
     response.status(201).json({
       roomId,
       roomName,
@@ -108,7 +199,7 @@ app.post("/api/rooms/:roomId/token", async (request, response, next) => {
     : "";
   const avatarId = request.body?.avatarId;
 
-  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(roomId)) {
+  if (!roomIdPattern.test(roomId)) {
     response.status(400).json({ error: "Geçersiz oda bağlantısı." });
     return;
   }
@@ -127,10 +218,13 @@ app.post("/api/rooms/:roomId/token", async (request, response, next) => {
   }
 
   try {
-    const [room] = await roomService.listRooms([roomId]);
+    const room = await findOrRestoreRoom(roomId);
     if (!room) {
       response.status(404).json({ error: "Bu oda bulunamadı veya artık açık değil." });
       return;
+    }
+    if (!roomRegistry.has(roomId)) {
+      await rememberRoom(roomId, room.metadata || "Sesver");
     }
 
     const participantName = `${firstName} ${lastName}`;
