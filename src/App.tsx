@@ -102,6 +102,7 @@ const legacyRecentRoomsKey = "sesegel.recentRooms";
 const savedProfileKey = "sesver.profile";
 const chatTopic = "sesver-chat";
 const roomControlTopic = "sesver-room-control";
+const popularMusicPlaylistId = "PL4fGSI1pDJn6puJdseH2Rt9sMvt9E2M4i";
 const maxChatMessages = 100;
 const maxChatMessageLength = 500;
 
@@ -370,6 +371,7 @@ export default function App() {
   const [microphoneEnabled, setMicrophoneEnabled] = useState(false);
   const [cameraEnabled, setCameraEnabled] = useState(false);
   const [screenSharing, setScreenSharing] = useState(false);
+  const [musicPlayerOpen, setMusicPlayerOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [toast, setToast] = useState("");
@@ -639,6 +641,15 @@ export default function App() {
     const timeout = window.setTimeout(() => setToast(""), 2400);
     return () => window.clearTimeout(timeout);
   }, [toast]);
+
+  useEffect(() => {
+    if (!musicPlayerOpen) return;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setMusicPlayerOpen(false);
+    };
+    document.addEventListener("keydown", closeOnEscape);
+    return () => document.removeEventListener("keydown", closeOnEscape);
+  }, [musicPlayerOpen]);
 
   const latestChatMessageRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -1583,21 +1594,62 @@ export default function App() {
               <span className="control-icon">▣</span>
               <span className="control-label">{screenSharing ? "Paylaşımı durdur" : "Ekran paylaş"}</span>
             </button>
-            <a
-              className="control-button music-control"
-              href="https://charts.youtube.com/charts/TopSongs/tr/weekly"
-              target="_blank"
-              rel="noreferrer"
-              aria-label="YouTube'da Türkiye'nin güncel popüler şarkılarını aç"
+            <button
+              className={`control-button music-control ${musicPlayerOpen ? "control-active" : ""}`}
+              type="button"
+              onClick={() => setMusicPlayerOpen(true)}
+              aria-label="Popüler müzik oynatıcısını aç"
             >
               <span className="control-icon" aria-hidden="true">♫</span>
               <span className="control-label">Popüler müzik</span>
-            </a>
+            </button>
             <button className="button button-leave" onClick={() => void leaveRoom()}>
               <span aria-hidden="true">↗</span><span className="control-label">Odadan ayrıl</span>
             </button>
           </footer>
           </section>
+        )}
+        {musicPlayerOpen && connected && (
+          <div
+            className="music-player-backdrop"
+            onMouseDown={(event) => {
+              if (event.target === event.currentTarget) setMusicPlayerOpen(false);
+            }}
+          >
+            <section
+              className="music-player-dialog"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="music-player-title"
+            >
+              <header className="music-player-heading">
+                <div>
+                  <span className="panel-eyebrow">YOUTUBE OYNATICISI</span>
+                  <h2 id="music-player-title">Popüler müzik</h2>
+                </div>
+                <button
+                  type="button"
+                  className="music-player-close"
+                  onClick={() => setMusicPlayerOpen(false)}
+                  aria-label="Müzik oynatıcısını kapat"
+                >
+                  ×
+                </button>
+              </header>
+              <iframe
+                className="music-player-frame"
+                src={`https://www.youtube-nocookie.com/embed/videoseries?list=${popularMusicPlaylistId}&autoplay=1&controls=1&playsinline=1&rel=0`}
+                title="YouTube popüler müzik oynatıcısı"
+                allow="autoplay; encrypted-media; picture-in-picture; web-share"
+                referrerPolicy="strict-origin-when-cross-origin"
+                allowFullScreen
+              />
+              <p className="music-player-note">
+                Müzik bu cihazda çalar; diğer katılımcılar duymaz. Oynatmak için YouTube
+                oynatıcısındaki başlat düğmesine basın.
+              </p>
+            </section>
+          </div>
         )}
         {createPasswordOpen && !connected && (
         <div className="entry-backdrop" onMouseDown={cancelCreatePassword}>
