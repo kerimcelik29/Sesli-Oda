@@ -413,9 +413,18 @@ h1, h2, p { margin-top: 0; }
 .room-shell .participant { position: relative; display: flex; min-width: 0; min-height: 105px; flex-direction: column; align-items: center; justify-content: center; gap: 7px; padding: 11px 6px 9px; border: 1px solid #ffffff0b; border-radius: 15px; background: #ffffff04; text-align: center; transition: background .18s ease, border-color .18s ease; }
 .room-shell .participant:hover, .room-shell .participant-local { border-color: #ffffff0b; background: #ffffff06; }
 .room-shell .participant-speaking { border-color: #5ce2a54d; background: #5ce2a510; box-shadow: inset 0 0 20px #5ce2a508; }
+.room-shell .participant-controls-open { z-index: 3; }
 .speaker-avatar { position: relative; display: grid; flex: 0 0 auto; place-items: center; border-radius: 50%; }
 .participant-speaker-avatar { width: 47px; height: 47px; }
+.participant-avatar-button { display: grid; width: 100%; height: 100%; place-items: center; padding: 0; border: 0; border-radius: 50%; background: transparent; }
+.participant-avatar-button:focus-visible { outline: 2px solid #70ddc2; outline-offset: 3px; }
 .room-shell .participant-avatar { width: 43px; height: 43px; flex: 0 0 auto; border: 2px solid #ffffff16; border-radius: 50%; box-shadow: 0 4px 12px #0003; }
+.participant-audio-menu { position: static; z-index: 5; display: grid; width: 100%; gap: 11px; padding: 11px; border: 1px solid #ffffff1a; border-radius: 13px; background: #1b2428; box-shadow: 0 8px 20px #0005; text-align: left; }
+.participant-audio-menu > strong { overflow: hidden; color: #e6f1ee; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+.participant-audio-menu label { display: grid; gap: 8px; color: #9aadaa; font-size: 10px; }
+.participant-audio-menu input[type="range"] { width: 100%; accent-color: #53d2b3; }
+.participant-mute-button { min-height: 31px; border: 1px solid #ffffff12; border-radius: 8px; color: #f0aaa9; background: #f8717110; font-size: 10px; font-weight: 600; }
+.participant-mute-button:hover { border-color: #f8717140; background: #f871711c; }
 .speaker-avatar::after {
   position: absolute;
   inset: -3px;

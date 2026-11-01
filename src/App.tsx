@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Room, RoomEvent, Track, type Participant } from "livekit-client";
+import { Room, RoomEvent, Track, type Participant, type RemoteParticipant } from "livekit-client";
 import headphonesLogo from "../headphones.svg";
 
 type RoomTokenResponse = {
@@ -362,6 +362,10 @@ export default function App() {
   const [toast, setToast] = useState("");
   const [revision, setRevision] = useState(0);
   const [speakingIdentities, setSpeakingIdentities] = useState<Set<string>>(() => new Set());
+  const [activeAudioControls, setActiveAudioControls] = useState<string | null>(null);
+  const [participantVolumes, setParticipantVolumes] = useState<Record<string, number>>({});
+  const previousParticipantVolumes = useRef<Record<string, number>>({});
+  const audioControlsRef = useRef<HTMLDivElement>(null);
   const notificationAudioRef = useRef<AudioContext | null>(null);
 
   useEffect(() => () => {
@@ -502,6 +506,54 @@ export default function App() {
     () => [room.localParticipant, ...room.remoteParticipants.values()],
     [room, revision]
   );
+
+  useEffect(() => {
+    if (!activeAudioControls) return;
+
+    audioControlsRef.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    const closeOnOutsideClick = (event: PointerEvent) => {
+      if (!audioControlsRef.current?.contains(event.target as Node)) {
+        setActiveAudioControls(null);
+      }
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setActiveAudioControls(null);
+    };
+    document.addEventListener("pointerdown", closeOnOutsideClick);
+    document.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.removeEventListener("pointerdown", closeOnOutsideClick);
+      document.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [activeAudioControls]);
+
+  useEffect(() => {
+    if (
+      activeAudioControls &&
+      !room.remoteParticipants.has(activeAudioControls)
+    ) {
+      setActiveAudioControls(null);
+    }
+  }, [activeAudioControls, participants, room]);
+
+  function setParticipantVolume(participant: RemoteParticipant, volume: number) {
+    const clampedVolume = Math.max(0, Math.min(1, volume));
+    participant.setVolume(clampedVolume, Track.Source.Microphone);
+    participant.setVolume(clampedVolume, Track.Source.ScreenShareAudio);
+    setParticipantVolumes((current) => ({
+      ...current,
+      [participant.identity]: clampedVolume
+    }));
+    if (clampedVolume > 0) {
+      previousParticipantVolumes.current[participant.identity] = clampedVolume;
+    }
+  }
+
+  function toggleParticipantMute(participant: RemoteParticipant) {
+    const currentVolume = participantVolumes[participant.identity] ?? 1;
+    const previousVolume = previousParticipantVolumes.current[participant.identity] ?? 1;
+    setParticipantVolume(participant, currentVolume === 0 ? previousVolume : 0);
+  }
 
   const screenTracks = useMemo(
     () => {
@@ -1042,17 +1094,40 @@ export default function App() {
               <div className="participant-list">
                 {participants.map((participant) => {
                   const isLocal = participant === room.localParticipant;
+                  const remoteParticipant = isLocal
+                    ? null
+                    : room.remoteParticipants.get(participant.identity) ?? null;
                   const isSpeaking = speakingIdentities.has(participant.identity);
                   return (
                     <div
-                      className={`participant ${isLocal ? "participant-local" : ""} ${isSpeaking ? "participant-speaking" : ""}`}
+                      ref={activeAudioControls === participant.identity ? audioControlsRef : undefined}
+                      className={`participant ${isLocal ? "participant-local" : ""} ${isSpeaking ? "participant-speaking" : ""} ${activeAudioControls === participant.identity ? "participant-controls-open" : ""}`}
                       key={participant.identity}
                     >
                       <span className={`speaker-avatar participant-speaker-avatar ${isSpeaking ? "speaker-speaking" : ""}`}>
-                        <Avatar
-                          variant={getAvatarId(participant.metadata, participant.identity)}
-                          className="participant-avatar"
-                        />
+                        {isLocal ? (
+                          <Avatar
+                            variant={getAvatarId(participant.metadata, participant.identity)}
+                            className="participant-avatar"
+                          />
+                        ) : (
+                          <button
+                            className="participant-avatar-button"
+                            type="button"
+                            aria-label={`${participant.name || "Katılımcı"} ses ayarları`}
+                            aria-expanded={activeAudioControls === participant.identity}
+                            onClick={() =>
+                              setActiveAudioControls((current) =>
+                                current === participant.identity ? null : participant.identity
+                              )
+                            }
+                          >
+                            <Avatar
+                              variant={getAvatarId(participant.metadata, participant.identity)}
+                              className="participant-avatar"
+                            />
+                          </button>
+                        )}
                       </span>
                       <span className="participant-name">
                         {participant.name || "Katılımcı"}
@@ -1076,6 +1151,38 @@ export default function App() {
                       >
                         {isSpeaking ? "♫" : participant.isMicrophoneEnabled ? "●" : "×"}
                       </span>
+                      {activeAudioControls === participant.identity && remoteParticipant && (
+                        <div
+                          className="participant-audio-menu"
+                          role="group"
+                          aria-label={`${participant.name || "Katılımcı"} ses ayarları`}
+                        >
+                          <strong>{participant.name || "Katılımcı"}</strong>
+                          <label>
+                            Ses seviyesi
+                            <input
+                              type="range"
+                              min="0"
+                              max="1"
+                              step="0.05"
+                              value={participantVolumes[participant.identity] ?? 1}
+                              onChange={(event) =>
+                                setParticipantVolume(remoteParticipant, Number(event.target.value))
+                              }
+                              aria-label={`${participant.name || "Katılımcı"} ses seviyesi`}
+                            />
+                          </label>
+                          <button
+                            className="participant-mute-button"
+                            type="button"
+                            onClick={() => toggleParticipantMute(remoteParticipant)}
+                          >
+                            {(participantVolumes[participant.identity] ?? 1) === 0
+                              ? "Sesi aç"
+                              : "Sustur"}
+                          </button>
+                        </div>
+                      )}
                     </div>
                   );
                 })}
