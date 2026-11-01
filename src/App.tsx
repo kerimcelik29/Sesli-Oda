@@ -40,6 +40,18 @@ type ChatMessage = {
   timestamp: number;
 };
 
+type RoomControlPeer = {
+  identity: string;
+  name: string;
+};
+
+type RoomControlMessage =
+  | { type: "request" }
+  | { type: "grant"; microphoneEnabled: boolean; cameraEnabled: boolean }
+  | { type: "deny" | "revoke" }
+  | { type: "action"; action: "microphone" | "camera" }
+  | { type: "status"; microphoneEnabled: boolean; cameraEnabled: boolean };
+
 const avatarColors = [
   ["#b7f3e6", "#42b99e", "#285e57"],
   ["#ffe0bd", "#e78b5a", "#633d58"],
@@ -89,6 +101,7 @@ const recentRoomsKey = "sesver.recentRooms";
 const legacyRecentRoomsKey = "sesegel.recentRooms";
 const savedProfileKey = "sesver.profile";
 const chatTopic = "sesver-chat";
+const roomControlTopic = "sesver-room-control";
 const maxChatMessages = 100;
 const maxChatMessageLength = 500;
 
@@ -366,7 +379,63 @@ export default function App() {
   const [participantVolumes, setParticipantVolumes] = useState<Record<string, number>>({});
   const previousParticipantVolumes = useRef<Record<string, number>>({});
   const audioControlsRef = useRef<HTMLDivElement>(null);
+  const [controlRequest, setControlRequest] = useState<RoomControlPeer | null>(null);
+  const [controlGrantedTo, setControlGrantedTo] = useState<RoomControlPeer | null>(null);
+  const [controlTarget, setControlTarget] = useState<RoomControlPeer | null>(null);
+  const [controlRequestSentTo, setControlRequestSentTo] = useState<RoomControlPeer | null>(null);
+  const [controlledParticipantMedia, setControlledParticipantMedia] = useState({
+    microphoneEnabled: false,
+    cameraEnabled: false
+  });
+  const controlRequestRef = useRef<RoomControlPeer | null>(null);
+  const controlGrantedToRef = useRef<RoomControlPeer | null>(null);
+  const controlTargetRef = useRef<RoomControlPeer | null>(null);
+  const controlRequestSentToRef = useRef<RoomControlPeer | null>(null);
   const notificationAudioRef = useRef<AudioContext | null>(null);
+
+  function updateControlRequest(request: RoomControlPeer | null) {
+    controlRequestRef.current = request;
+    setControlRequest(request);
+  }
+
+  function updateControlGrantedTo(peer: RoomControlPeer | null) {
+    controlGrantedToRef.current = peer;
+    setControlGrantedTo(peer);
+  }
+
+  function updateControlTarget(peer: RoomControlPeer | null) {
+    controlTargetRef.current = peer;
+    setControlTarget(peer);
+  }
+
+  function updateControlRequestSentTo(peer: RoomControlPeer | null) {
+    controlRequestSentToRef.current = peer;
+    setControlRequestSentTo(peer);
+  }
+
+  function isLocalScreenBeingShared() {
+    const publication = room.localParticipant.getTrackPublication(Track.Source.ScreenShare);
+    return Boolean(publication && !publication.isMuted);
+  }
+
+  async function sendRoomControlMessage(identity: string, message: RoomControlMessage) {
+    await room.localParticipant.publishData(
+      new TextEncoder().encode(JSON.stringify(message)),
+      {
+        reliable: true,
+        topic: roomControlTopic,
+        destinationIdentities: [identity]
+      }
+    );
+  }
+
+  async function sendControlledMediaStatus(identity: string) {
+    await sendRoomControlMessage(identity, {
+      type: "status",
+      microphoneEnabled: room.localParticipant.isMicrophoneEnabled,
+      cameraEnabled: room.localParticipant.isCameraEnabled
+    });
+  }
 
   useEffect(() => () => {
     void notificationAudioRef.current?.close();
@@ -449,9 +518,79 @@ export default function App() {
       _kind?: unknown,
       topic?: string
     ) => {
-      if (topic !== chatTopic || !participant) return;
+      if (!participant) return;
       try {
         const message: unknown = JSON.parse(new TextDecoder().decode(payload));
+        if (topic === roomControlTopic) {
+          if (typeof message !== "object" || message === null || !("type" in message)) return;
+          const controlMessage = message as Partial<RoomControlMessage>;
+          const peer = {
+            identity: participant.identity,
+            name: participant.name || "Katılımcı"
+          };
+
+          if (
+            controlMessage.type === "request" &&
+            isLocalScreenBeingShared() &&
+            !controlGrantedToRef.current &&
+            !controlRequestRef.current
+          ) {
+            updateControlRequest(peer);
+          } else if (
+            controlMessage.type === "grant" &&
+            typeof controlMessage.microphoneEnabled === "boolean" &&
+            typeof controlMessage.cameraEnabled === "boolean" &&
+            controlRequestSentToRef.current?.identity === participant.identity &&
+            participant.getTrackPublication(Track.Source.ScreenShare) &&
+            !participant.getTrackPublication(Track.Source.ScreenShare)?.isMuted &&
+            !controlTargetRef.current
+          ) {
+            updateControlRequestSentTo(null);
+            updateControlTarget(peer);
+            setControlledParticipantMedia({
+              microphoneEnabled: controlMessage.microphoneEnabled,
+              cameraEnabled: controlMessage.cameraEnabled
+            });
+          } else if (
+            controlMessage.type === "action" &&
+            (controlMessage.action === "microphone" || controlMessage.action === "camera") &&
+            controlGrantedToRef.current?.identity === participant.identity &&
+            isLocalScreenBeingShared()
+          ) {
+            void (async () => {
+              if (controlMessage.action === "microphone") {
+                await toggleMicrophone();
+              } else {
+                await toggleCamera();
+              }
+            })().catch((controlError: unknown) => {
+              setError(controlError instanceof Error ? controlError.message : "Uzak denetim işlemi başarısız oldu.");
+            });
+          } else if (
+            controlMessage.type === "deny" &&
+            controlRequestSentToRef.current?.identity === participant.identity
+          ) {
+            updateControlRequestSentTo(null);
+            setToast(`${peer.name} denetim isteğini reddetti`);
+          } else if (
+            controlMessage.type === "revoke" &&
+            controlTargetRef.current?.identity === participant.identity
+          ) {
+            updateControlTarget(null);
+          } else if (
+            controlMessage.type === "status" &&
+            typeof controlMessage.microphoneEnabled === "boolean" &&
+            typeof controlMessage.cameraEnabled === "boolean" &&
+            controlTargetRef.current?.identity === participant.identity
+          ) {
+            setControlledParticipantMedia({
+              microphoneEnabled: controlMessage.microphoneEnabled,
+              cameraEnabled: controlMessage.cameraEnabled
+            });
+          }
+          return;
+        }
+        if (topic !== chatTopic) return;
         if (
           typeof message === "object" &&
           message !== null &&
@@ -479,7 +618,11 @@ export default function App() {
           }
         }
       } catch {
-        setError("Sohbet mesajı okunamadı.");
+        setError(
+          topic === roomControlTopic
+            ? "Denetim mesajı okunamadı."
+            : "Sohbet mesajı okunamadı."
+        );
       }
     };
     room.on(RoomEvent.DataReceived, handleDataReceived);
@@ -535,6 +678,93 @@ export default function App() {
       setActiveAudioControls(null);
     }
   }, [activeAudioControls, participants, room]);
+
+  useEffect(() => {
+    const peerIsPresent = (peer: RoomControlPeer | null) =>
+      !peer || room.remoteParticipants.has(peer.identity);
+    if (!peerIsPresent(controlRequest)) updateControlRequest(null);
+    if (!peerIsPresent(controlGrantedTo)) updateControlGrantedTo(null);
+    if (!peerIsPresent(controlTarget)) updateControlTarget(null);
+    if (!peerIsPresent(controlRequestSentTo)) updateControlRequestSentTo(null);
+  }, [controlGrantedTo, controlRequest, controlRequestSentTo, controlTarget, participants, room]);
+
+  useEffect(() => {
+    if (!controlGrantedTo || isLocalScreenBeingShared()) return;
+
+    void sendRoomControlMessage(controlGrantedTo.identity, { type: "revoke" }).catch(
+      (controlError: unknown) => {
+        setError(controlError instanceof Error ? controlError.message : "Denetim izni geri alınamadı.");
+      }
+    );
+    updateControlGrantedTo(null);
+  }, [controlGrantedTo, revision]);
+
+  useEffect(() => {
+    if (!controlGrantedTo) return;
+
+    void sendControlledMediaStatus(controlGrantedTo.identity).catch(
+      (controlError: unknown) => {
+        setError(controlError instanceof Error ? controlError.message : "Denetim durumu gönderilemedi.");
+      }
+    );
+  }, [cameraEnabled, controlGrantedTo, microphoneEnabled]);
+
+  async function requestRoomControl(peer: RoomControlPeer) {
+    updateControlRequestSentTo(peer);
+    try {
+      await sendRoomControlMessage(peer.identity, { type: "request" });
+      setToast(`${peer.name} kişisine denetim isteği gönderildi`);
+      setActiveAudioControls(null);
+    } catch (controlError) {
+      updateControlRequestSentTo(null);
+      setError(controlError instanceof Error ? controlError.message : "Denetim isteği gönderilemedi.");
+    }
+  }
+
+  async function respondToRoomControlRequest(accepted: boolean) {
+    const requester = controlRequestRef.current;
+    if (!requester) return;
+    updateControlRequest(null);
+
+    try {
+      if (accepted && isLocalScreenBeingShared()) {
+        updateControlGrantedTo(requester);
+        await sendRoomControlMessage(requester.identity, {
+          type: "grant",
+          microphoneEnabled: room.localParticipant.isMicrophoneEnabled,
+          cameraEnabled: room.localParticipant.isCameraEnabled
+        });
+      } else {
+        await sendRoomControlMessage(requester.identity, { type: "deny" });
+      }
+    } catch (controlError) {
+      updateControlGrantedTo(null);
+      setError(controlError instanceof Error ? controlError.message : "Denetim yanıtı gönderilemedi.");
+    }
+  }
+
+  async function revokeRoomControl() {
+    const controller = controlGrantedToRef.current;
+    updateControlGrantedTo(null);
+    if (!controller) return;
+
+    try {
+      await sendRoomControlMessage(controller.identity, { type: "revoke" });
+    } catch (controlError) {
+      setError(controlError instanceof Error ? controlError.message : "Denetim izni geri alınamadı.");
+    }
+  }
+
+  async function controlSharedParticipant(action: "microphone" | "camera") {
+    const target = controlTargetRef.current;
+    if (!target) return;
+
+    try {
+      await sendRoomControlMessage(target.identity, { type: "action", action });
+    } catch (controlError) {
+      setError(controlError instanceof Error ? controlError.message : "Denetim işlemi gönderilemedi.");
+    }
+  }
 
   function setParticipantVolume(participant: RemoteParticipant, volume: number) {
     const clampedVolume = Math.max(0, Math.min(1, volume));
@@ -769,7 +999,7 @@ export default function App() {
 
   async function toggleMicrophone() {
     try {
-      const enabled = !microphoneEnabled;
+      const enabled = !room.localParticipant.isMicrophoneEnabled;
       await room.localParticipant.setMicrophoneEnabled(enabled);
       setMicrophoneEnabled(enabled);
     } catch (mediaError) {
@@ -779,7 +1009,7 @@ export default function App() {
 
   async function toggleCamera() {
     try {
-      const enabled = !cameraEnabled;
+      const enabled = !room.localParticipant.isCameraEnabled;
       if (enabled) {
         if (!navigator.mediaDevices?.enumerateDevices) {
           setError("Tarayıcı kameraya erişemiyor. Güvenli bağlantı veya kamera iznini kontrol edin.");
@@ -827,6 +1057,10 @@ export default function App() {
     setMicrophoneEnabled(false);
     setCameraEnabled(false);
     setScreenSharing(false);
+    updateControlRequest(null);
+    updateControlGrantedTo(null);
+    updateControlTarget(null);
+    updateControlRequestSentTo(null);
     setInviteUrl("");
     setChatMessages([]);
     setChatDraft("");
@@ -1032,6 +1266,66 @@ export default function App() {
               </button>
             </div>
           </header>
+          {controlRequest && (
+            <div className="room-control-notice" role="alert">
+              <p>
+                <strong>{controlRequest.name}</strong>, oda içindeki mikrofon ve kamera
+                düğmelerinizi kullanmak için izin istiyor.
+              </p>
+              <div>
+                <button type="button" onClick={() => void respondToRoomControlRequest(true)}>
+                  İzin ver
+                </button>
+                <button type="button" onClick={() => void respondToRoomControlRequest(false)}>
+                  Reddet
+                </button>
+              </div>
+            </div>
+          )}
+          {controlGrantedTo && (
+            <div className="room-control-notice room-control-active" role="status">
+              <p>
+                <strong>{controlGrantedTo.name}</strong> mikrofon ve kamera düğmelerinizi
+                kullanabiliyor. Bu izin yalnızca Sesver odası için geçerlidir.
+              </p>
+              <button type="button" onClick={() => void revokeRoomControl()}>
+                Denetimi geri al
+              </button>
+            </div>
+          )}
+          {controlRequestSentTo && !controlTarget && (
+            <div className="room-control-notice room-control-active" role="status">
+              <p>
+                <strong>{controlRequestSentTo.name}</strong> kişisinden oda içi denetim izni
+                bekleniyor.
+              </p>
+            </div>
+          )}
+          {controlTarget && (
+            <div className="room-control-notice room-control-active" role="group" aria-label="Paylaşılan ekran denetimi">
+              <p>
+                <strong>{controlTarget.name}</strong> size oda içi denetim verdi.
+              </p>
+              <div>
+                <button
+                  type="button"
+                  onClick={() => void controlSharedParticipant("microphone")}
+                >
+                  {controlledParticipantMedia.microphoneEnabled
+                    ? "Paylaşanın mikrofonunu kapat"
+                    : "Paylaşanın mikrofonunu aç"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void controlSharedParticipant("camera")}
+                >
+                  {controlledParticipantMedia.cameraEnabled
+                    ? "Paylaşanın kamerasını kapat"
+                    : "Paylaşanın kamerasını aç"}
+                </button>
+              </div>
+            </div>
+          )}
           <div className="room-content">
             <div className="stage">
               {screenTracks.length ? (
@@ -1181,6 +1475,21 @@ export default function App() {
                               ? "Sesi aç"
                               : "Sustur"}
                           </button>
+                          {screenTracks.some(({ identity }) => identity === participant.identity) && (
+                            <button
+                              className="participant-control-request"
+                              type="button"
+                              onClick={() =>
+                                void requestRoomControl({
+                                  identity: participant.identity,
+                                  name: participant.name || "Katılımcı"
+                                })
+                              }
+                              disabled={Boolean(controlTarget || controlRequestSentTo)}
+                            >
+                              Denetim iste
+                            </button>
+                          )}
                         </div>
                       )}
                     </div>
