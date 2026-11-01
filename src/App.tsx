@@ -333,6 +333,7 @@ function ScreenShareTile({
 }
 
 export default function App() {
+  const isDesktopApp = new URLSearchParams(window.location.search).get("platform") === "desktop";
   const [room] = useState(() => new Room({ adaptiveStream: true, dynacast: true }));
   const [roomId, setRoomId] = useState(
     () => new URLSearchParams(window.location.search).get("room") ?? ""
@@ -777,42 +778,67 @@ export default function App() {
     setInviteUrl("");
     setChatMessages([]);
     setChatDraft("");
-    window.history.replaceState(null, "", window.location.pathname);
+    const url = new URL(window.location.href);
+    url.searchParams.delete("room");
+    window.history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
   }
 
   return (
-    <main className={`app-shell ${connected ? "room-shell" : ""}`}>
-      <header className="topbar">
-        <a className="brand" href="/" aria-label="Sesver ana sayfa">
-          <img className="brand-mark" src={headphonesLogo} alt="" />
-          <span>Sesver</span>
-        </a>
-        <span className="topbar-note"><span className="connection-dot" /> Görüşme alanı hazır</span>
-      </header>
+    <div className={isDesktopApp ? "desktop-app" : undefined}>
+      <main className={`app-shell ${connected ? "room-shell" : ""}`}>
+        <header className="topbar">
+          <a className="brand" href="/" aria-label="Sesver ana sayfa">
+            <img className="brand-mark" src={headphonesLogo} alt="" />
+            <span>Sesver</span>
+          </a>
+          <span className="topbar-note">
+            {isDesktopApp ? (
+              <>
+                <span className="connection-dot" /> Görüşme alanı hazır
+              </>
+            ) : (
+              "Hesap yok, davet bağlantısı yeterli."
+            )}
+          </span>
+        </header>
 
-      {error && (
-        <div className="error-banner" role="alert">
-          {error}
-          <button type="button" onClick={() => setError("")} aria-label="Uyarıyı kapat">
-            ×
-          </button>
-        </div>
-      )}
-      {toast && (
-        <div className="copy-toast" role="status">
-          <span aria-hidden="true">✓</span>
-          {toast}
-        </div>
-      )}
+        {error && (
+          <div className="error-banner" role="alert">
+            {error}
+            <button type="button" onClick={() => setError("")} aria-label="Uyarıyı kapat">
+              ×
+            </button>
+          </div>
+        )}
+        {toast && (
+          <div className="copy-toast" role="status">
+            <span aria-hidden="true">✓</span>
+            {toast}
+          </div>
+        )}
 
-      {!connected ? (
-        <section className="welcome">
-          <div className="welcome-copy">
-            <span className="eyebrow">ÇALIŞMA ALANI</span>
-            <h1>Bir odaya<br />katılın.</h1>
-            <p>
-              Yeni bir görüşme başlatın veya davet bağlantısıyla mevcut bir odaya katılın.
-            </p>
+        {!connected ? (
+          <section className="welcome">
+            <div className="welcome-copy">
+              <span className="eyebrow">
+                {isDesktopApp ? "ÇALIŞMA ALANI" : "BİRLİKTE OLMAK DAHA KOLAY"}
+              </span>
+              <h1>
+                {isDesktopApp ? (
+                  <>
+                    Bir odaya<br />katılın.
+                  </>
+                ) : (
+                  <>
+                    Sesini duyur.<br />Ekranını paylaş.
+                  </>
+                )}
+              </h1>
+              <p>
+                {isDesktopApp
+                  ? "Yeni bir görüşme başlatın veya davet bağlantısıyla mevcut bir odaya katılın."
+                  : "Bir oda aç, bağlantıyı arkadaşlarınla paylaş ve sohbete başlayın. Kayıt olmak gerekmez."}
+              </p>
             <div className="welcome-actions">
               <button
                 className="button button-primary"
@@ -894,35 +920,49 @@ export default function App() {
                 </div>
               </div>
             )}
-          </div>
-          <aside className="welcome-art" aria-label="Ses odası önizlemesi">
-            <div className="workspace-heading">
-              <div>
-                <span>ODA ÖNİZLEMESİ</span>
-                <strong>Sesli buluşma</strong>
+            </div>
+            {isDesktopApp ? (
+              <aside className="welcome-art" aria-label="Ses odası önizlemesi">
+                <div className="workspace-heading">
+                  <div>
+                    <span>ODA ÖNİZLEMESİ</span>
+                    <strong>Sesli buluşma</strong>
+                  </div>
+                  <span className="workspace-status"><i /> Hazır</span>
+                </div>
+                <div className="orbit orbit-one" />
+                <div className="orbit orbit-two" />
+                <div className="art-card">
+                  <div className="art-participants">
+                    <div><span className="avatar avatar-violet">A</span><small>Ayşe</small></div>
+                    <div><span className="avatar avatar-blue">M</span><small>Mert</small></div>
+                    <div><span className="avatar avatar-orange">E</span><small>Elif</small></div>
+                  </div>
+                  <span className="sound-wave"><i /><i /><i /><i /><i /><i /><i /></span>
+                  <span className="art-caption">Sesli oda</span>
+                </div>
+                <div className="workspace-footer">
+                  <span><i>●</i> Mikrofon</span>
+                  <span><i>●</i> Kamera</span>
+                  <span><i>●</i> Ekran paylaşımı</span>
+                </div>
+              </aside>
+            ) : (
+              <div className="welcome-art" aria-hidden="true">
+                <div className="orbit orbit-one" />
+                <div className="orbit orbit-two" />
+                <div className="art-card">
+                  <span className="avatar avatar-violet">A</span>
+                  <span className="avatar avatar-blue">M</span>
+                  <span className="avatar avatar-orange">E</span>
+                  <span className="sound-wave"><i /><i /><i /><i /><i /><i /><i /></span>
+                  <span className="art-caption">Sohbet başladı</span>
+                </div>
               </div>
-              <span className="workspace-status"><i /> Hazır</span>
-            </div>
-            <div className="orbit orbit-one" />
-            <div className="orbit orbit-two" />
-            <div className="art-card">
-              <div className="art-participants">
-                <div><span className="avatar avatar-violet">A</span><small>Ayşe</small></div>
-                <div><span className="avatar avatar-blue">M</span><small>Mert</small></div>
-                <div><span className="avatar avatar-orange">E</span><small>Elif</small></div>
-              </div>
-              <span className="sound-wave"><i /><i /><i /><i /><i /><i /><i /></span>
-              <span className="art-caption">Sesli oda</span>
-            </div>
-            <div className="workspace-footer">
-              <span><i>●</i> Mikrofon</span>
-              <span><i>●</i> Kamera</span>
-              <span><i>●</i> Ekran paylaşımı</span>
-            </div>
-          </aside>
-        </section>
-      ) : (
-        <section className="room-layout">
+            )}
+          </section>
+        ) : (
+          <section className="room-layout">
           <header className="room-heading">
             <div>
               <span className="room-kicker"><span className="connection-dot" /> SES GEL BULUŞMASI</span>
@@ -1137,9 +1177,9 @@ export default function App() {
               <span aria-hidden="true">↗</span><span className="control-label">Odadan ayrıl</span>
             </button>
           </footer>
-        </section>
-      )}
-      {createPasswordOpen && !connected && (
+          </section>
+        )}
+        {createPasswordOpen && !connected && (
         <div className="entry-backdrop" onMouseDown={cancelCreatePassword}>
           <form
             className="entry-dialog"
@@ -1175,8 +1215,8 @@ export default function App() {
             </button>
           </form>
         </div>
-      )}
-      {entryAction && !connected && (
+        )}
+        {entryAction && !connected && (
         <div className="entry-backdrop" onMouseDown={() => !busy && cancelEntry()}>
           <form
             className="entry-dialog"
@@ -1242,8 +1282,9 @@ export default function App() {
             </button>
           </form>
         </div>
-      )}
-    </main>
+        )}
+      </main>
+    </div>
   );
 }
 

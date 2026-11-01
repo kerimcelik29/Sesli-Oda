@@ -17,9 +17,13 @@ function createWindow() {
   });
 
   if (process.env.VITE_DEV_SERVER_URL) {
-    window.loadURL(process.env.VITE_DEV_SERVER_URL);
+    const url = new URL(process.env.VITE_DEV_SERVER_URL);
+    url.searchParams.set("platform", "desktop");
+    window.loadURL(url.toString());
   } else {
-    window.loadFile(path.join(__dirname, "../dist/index.html"));
+    window.loadFile(path.join(__dirname, "../dist/index.html"), {
+      query: { platform: "desktop" }
+    });
   }
 }
 
